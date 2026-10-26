@@ -17,12 +17,22 @@ global.mongooseCache = cached;
 
 async function connectDB(): Promise<typeof mongoose> {
   if (cached.conn) return cached.conn;
+
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI, {
-      bufferCommands: false,
-    });
+    cached.promise = mongoose
+      .connect(MONGODB_URI, {
+        bufferCommands: false,
+      })
+      .then((m) => m);
   }
-  cached.conn = await cached.promise;
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (error) {
+    cached.promise = null; // Reset promise so next request can retry connecting
+    throw error;
+  }
+
   return cached.conn;
 }
 
