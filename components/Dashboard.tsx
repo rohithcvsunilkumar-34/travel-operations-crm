@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, CalendarCheck, Truck, Package as PackageIcon, Menu,
-  ChevronLeft, ChevronRight, RefreshCw, Download, FileText, CalendarDays, LogOut
+  ChevronLeft, ChevronRight, RefreshCw, Download, FileText, CalendarDays, LogOut, Bell
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import KPICard from './KPICard';
@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [kpiLoading, setKpiLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showCustomReportModal, setShowCustomReportModal] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const addToast = useCallback((msg: Omit<ToastMessage, 'id'>) => {
@@ -77,6 +78,39 @@ export default function Dashboard() {
   useEffect(() => {
     fetchKPI();
   }, [fetchKPI]);
+
+  const triggerRemindersCheck = useCallback(async (manual = false) => {
+    try {
+      if (manual) setSendingReminders(true);
+      const res = await fetch('/api/cron/reminders', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const count = data.report?.remindersSentCount || 0;
+        if (count > 0) {
+          addToast({
+            type: 'success',
+            message: `📢 Sent ${count} upcoming tour check-in reminder(s) to email!`,
+          });
+        } else if (manual) {
+          addToast({
+            type: 'info',
+            message: 'No pending check-in reminders for today (7-day, 3-day, or 1-day milestones).',
+          });
+        }
+      } else if (manual) {
+        addToast({ type: 'error', message: 'Failed to trigger check-in reminders' });
+      }
+    } catch {
+      if (manual) addToast({ type: 'error', message: 'Reminder check error' });
+    } finally {
+      if (manual) setSendingReminders(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    // Check reminders automatically on dashboard load
+    triggerRemindersCheck(false);
+  }, [triggerRemindersCheck]);
 
   const handleLogout = async () => {
     if (!confirm('Are you sure you want to sign out of the CRM?')) return;
@@ -309,6 +343,16 @@ export default function Dashboard() {
               >
                 <FileText size={14} />
                 Master PDF
+              </button>
+
+              <button
+                onClick={() => triggerRemindersCheck(true)}
+                disabled={sendingReminders}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors border border-amber-200"
+                title="Check & Send Upcoming Tour Check-in Reminders (7-day, 3-day, 1-day)"
+              >
+                <Bell size={14} className={sendingReminders ? 'animate-bounce text-amber-600' : 'text-amber-600'} />
+                <span>{sendingReminders ? 'Checking...' : 'Check Reminders'}</span>
               </button>
 
               <button

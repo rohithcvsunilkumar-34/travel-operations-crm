@@ -17,6 +17,19 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const { valid } = await verifySessionToken(token);
 
+  // 1b. Allow cron endpoint if valid cron secret is supplied
+  if (pathname.startsWith('/api/cron/')) {
+    const cronSecret = process.env.CRON_SECRET || 'crm_cron_secret_2026';
+    const providedSecret =
+      req.headers.get('x-cron-secret') ||
+      req.headers.get('authorization')?.replace('Bearer ', '') ||
+      req.nextUrl.searchParams.get('secret');
+
+    if (providedSecret === cronSecret) {
+      return NextResponse.next();
+    }
+  }
+
   // 2. Handling the /login page
   if (pathname === '/login') {
     if (valid) {

@@ -11,26 +11,30 @@
     "clear": "node scripts/clear.mjs",
     "sync:up": "node scripts/sync.mjs push",
     "sync:down": "node scripts/sync.mjs pull",
-    "sync:status": "node scripts/sync.mjs status"
+    "sync:status": "node scripts/sync.mjs status",
+    "notify": "node scripts/notify.mjs",
+    "test:reminders": "node scripts/test-reminders.mjs"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.2",
+    "date-fns": "^3.6.0",
+    "lucide-react": "^0.417.0",
+    "mongoose": "^8.5.0",
     "next": "14.2.5",
+    "nodemailer": "^10.2.1",
     "react": "^18",
     "react-dom": "^18",
     "typescript": "^5",
-    "mongoose": "^8.5.0",
-    "xlsx": "^0.18.5",
-    "lucide-react": "^0.417.0",
-    "date-fns": "^3.6.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10",
-    "postcss": "^8",
-    "tailwindcss": "^3",
     "eslint": "^8",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8",
+    "tailwindcss": "^3"
   }
 }

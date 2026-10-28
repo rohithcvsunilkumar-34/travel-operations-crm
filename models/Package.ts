@@ -22,6 +22,7 @@ export interface IPackage extends Document {
   advancePaid: number;
   balancePending: number;
   status: 'Upcoming' | 'Ongoing' | 'Completed' | 'Cancelled';
+  remindersSent?: string[];
   dailyLogs: IDailyLog[];
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +54,10 @@ const PackageSchema = new Schema<IPackage>(
       type: String,
       enum: ['Upcoming', 'Ongoing', 'Completed', 'Cancelled'],
       default: 'Upcoming',
+    },
+    remindersSent: {
+      type: [String],
+      default: [],
     },
     dailyLogs: [DailyLogSchema],
   },
