@@ -576,6 +576,15 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                             <Eye size={15} />
                             <span className="text-xs font-semibold hidden 2xl:inline">View</span>
                           </button>
+
+                          <button
+                            title="Edit Package"
+                            onClick={() => { setEditPkg(pkg); setShowModal(true); }}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+                          >
+                            <Edit size={15} />
+                          </button>
+                         
                           <button
                             title="Download Full Package Voucher PDF"
                             onClick={() => downloadSinglePackagePDF(pkg)}
@@ -606,6 +615,13 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                             <CreditCard size={15} />
                           </button>
                           <button
+                            title="Delete Package"
+                            onClick={() => handleDelete(pkg)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-red-500"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                          <button
                             title="View/Edit Itinerary"
                             onClick={() => { setLogPkg(pkg); setShowLogModal(true); }}
                             className="p-1.5 rounded-lg hover:bg-amber-50 transition-colors"
@@ -613,20 +629,7 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                           >
                             <MapPin size={15} />
                           </button>
-                          <button
-                            title="Edit Package"
-                            onClick={() => { setEditPkg(pkg); setShowModal(true); }}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
-                          >
-                            <Edit size={15} />
-                          </button>
-                          <button
-                            title="Delete Package"
-                            onClick={() => handleDelete(pkg)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-red-500"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                         
                           {pkg.dailyLogs && pkg.dailyLogs.length > 0 && (
                             <button
                               title="Toggle itinerary preview"
