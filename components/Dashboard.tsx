@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, CalendarCheck, Truck, Package as PackageIcon, Menu,
-  ChevronLeft, ChevronRight, RefreshCw, Download, FileText, CalendarDays, LogOut
+  ChevronLeft, ChevronRight, RefreshCw, Download, FileText, CalendarDays, LogOut, Bell
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import KPICard from './KPICard';
@@ -12,6 +12,8 @@ import FleetTab from './FleetTab';
 import CleanupTab from './CleanupTab';
 import Toast, { ToastMessage } from './Toast';
 import CustomReportModal from './CustomReportModal';
+import NotificationCenter from './NotificationCenter';
+import PackageDetailsModal from './PackageDetailsModal';
 import * as XLSX from 'xlsx';
 import { exportMasterReportPDF } from '@/lib/pdfExport';
 
@@ -49,7 +51,44 @@ export default function Dashboard() {
   const [kpiLoading, setKpiLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showCustomReportModal, setShowCustomReportModal] = useState(false);
+  const [selectedNotifPackage, setSelectedNotifPackage] = useState<any | null>(null);
+  const [showNotifPackageModal, setShowNotifPackageModal] = useState(false);
+  const [urgentAlerts, setUrgentAlerts] = useState<any[]>([]);
   const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchUrgentAlerts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.notifications)) {
+          const urgents = data.notifications.filter(
+            (n: any) => n.stage === 'today' || n.stage === '1_day' || n.stage === '3_days'
+          );
+          setUrgentAlerts(urgents);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUrgentAlerts();
+  }, [fetchUrgentAlerts]);
+
+  const handleOpenNotificationPackage = async (packageId: string) => {
+    try {
+      const res = await fetch(`/api/packages/${packageId}`);
+      if (res.ok) {
+        const pkgData = await res.json();
+        setSelectedNotifPackage(pkgData);
+        setShowNotifPackageModal(true);
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Failed to load package details' });
+    }
+  };
 
   const addToast = useCallback((msg: Omit<ToastMessage, 'id'>) => {
     const id = Date.now().toString() + Math.random().toString(36).slice(2);
@@ -321,6 +360,12 @@ export default function Dashboard() {
                 Excel Report
               </button>
 
+              {/* In-App Check-in Notifications Center */}
+              <NotificationCenter
+                onOpenPackageDetails={handleOpenNotificationPackage}
+                onNavigateToPackages={() => setActiveTab('packages')}
+              />
+
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 hover:text-red-600 bg-gray-100 hover:bg-red-50 rounded-xl transition-colors border border-gray-200"
@@ -338,6 +383,38 @@ export default function Dashboard() {
           {/* Dashboard Tab */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
+              {/* Urgent Arrivals Alert Banner */}
+              {urgentAlerts.length > 0 && (
+                <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200 border border-white/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 shadow-inner">
+                      <Bell size={20} className="text-white animate-bounce" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm tracking-tight flex items-center gap-2">
+                        <span>🚨 Operational Alert:</span>
+                        <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-semibold">
+                          {urgentAlerts.length} Upcoming Arrival{urgentAlerts.length > 1 ? 's' : ''} Require Attention!
+                        </span>
+                      </div>
+                      <div className="text-xs text-white/90 mt-0.5">
+                        {urgentAlerts
+                          .map((u) => `${u.guestName} (${u.badge})`)
+                          .slice(0, 3)
+                          .join(' • ')}
+                        {urgentAlerts.length > 3 ? ` • +${urgentAlerts.length - 3} more` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('packages')}
+                    className="px-3.5 py-1.5 rounded-xl bg-white text-gray-900 font-bold text-xs shadow hover:bg-slate-100 transition-colors whitespace-nowrap self-end sm:self-auto"
+                  >
+                    View Packages &rarr;
+                  </button>
+                </div>
+              )}
+
               {/* Date Display Banner */}
               <div
                 className="rounded-2xl px-6 py-4 flex items-center justify-between"
@@ -511,6 +588,16 @@ export default function Dashboard() {
         isOpen={showCustomReportModal}
         onClose={() => setShowCustomReportModal(false)}
         addToast={addToast}
+      />
+
+      {/* Package Details Modal from In-App Notification click */}
+      <PackageDetailsModal
+        isOpen={showNotifPackageModal}
+        onClose={() => {
+          setShowNotifPackageModal(false);
+          setSelectedNotifPackage(null);
+        }}
+        pkg={selectedNotifPackage}
       />
     </div>
   );
