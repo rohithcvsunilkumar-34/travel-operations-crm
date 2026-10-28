@@ -2,11 +2,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Download, ArrowUpDown, ArrowUp, ArrowDown,
-  Edit, Trash2, Truck, Users, Calendar, Filter, ChevronUp, ChevronDown, Phone
+  Edit, Trash2, Truck, Users, Calendar, Filter, ChevronUp, ChevronDown, Phone, FileText, Eye
 } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import VehicleModal from './VehicleModal';
+import PackageDetailsModal from './PackageDetailsModal';
+import { formatName, getInitials } from '@/lib/formatters';
 import * as XLSX from 'xlsx';
+import { exportFleetReportPDF } from '@/lib/pdfExport';
 
 interface VehicleLog {
   _id: string;
@@ -48,10 +51,29 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
   const [singleDate, setSingleDate] = useState(defaultDate || '');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showModal, setShowModal] = useState(false);
   const [editLog, setEditLog] = useState<VehicleLog | undefined>(undefined);
+  const [selectedViewPkg, setSelectedViewPkg] = useState<any | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  const handleViewPackage = async (bookingId: string) => {
+    try {
+      const res = await fetch(`/api/packages?search=${encodeURIComponent(bookingId)}`);
+      if (res.ok) {
+        const pkgs = await res.json();
+        const found = pkgs.find((p: any) => p.bookingId.toLowerCase() === bookingId.toLowerCase()) || pkgs[0];
+        if (found) {
+          setSelectedViewPkg(found);
+          return;
+        }
+      }
+      addToast({ type: 'warning', message: `Could not find package details for ${bookingId}` });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to load package details' });
+    }
+  };
 
   const fetchVehicles = useCallback(async () => {
     setLoading(true);
@@ -141,11 +163,56 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
     addToast({ type: 'success', message: 'Fleet Excel report downloaded!' });
   };
 
+  const handleMonthChange = (monthStr: string) => {
+    setSelectedMonth(monthStr);
+    setSingleDate('');
+    if (!monthStr) {
+      setFromDate('');
+      setToDate('');
+      return;
+    }
+    const [year, month] = monthStr.split('-').map(Number);
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    setFromDate(start);
+    setToDate(end);
+  };
+
+  const setQuickMonth = (offset: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + offset);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+    handleMonthChange(monthStr);
+  };
+
+  const downloadPDF = () => {
+    if (vehicles.length === 0) {
+      addToast({ type: 'warning', message: 'No vehicle logs to export' });
+      return;
+    }
+    const filterInfo = selectedMonth
+      ? `Month: ${new Date(selectedMonth + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`
+      : singleDate
+      ? `Date: ${formatDate(singleDate)}`
+      : fromDate || toDate
+      ? `Date Range: ${formatDate(fromDate)} to ${formatDate(toDate)}`
+      : search
+      ? `Search: "${search}"`
+      : undefined;
+
+    exportFleetReportPDF(vehicles, filterInfo);
+    addToast({ type: 'success', message: 'Fleet PDF preview ready!' });
+  };
+
   const clearFilters = () => {
     setSearch('');
     setSingleDate('');
     setFromDate('');
     setToDate('');
+    setSelectedMonth('');
     setSortDir('desc');
   };
 
@@ -171,6 +238,15 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
             <Filter size={16} />
             Filters
             {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button
+            onClick={downloadPDF}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white rounded-xl transition-opacity hover:opacity-90 shadow-sm"
+            style={{ backgroundColor: '#DC2626' }}
+            title="Download Daily Fleet PDF Roster"
+          >
+            <FileText size={16} />
+            Export PDF
           </button>
           <button
             onClick={downloadExcel}
@@ -245,7 +321,38 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+          {/* Quick Month Bar */}
+          <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-gray-100 text-xs">
+            <span className="font-semibold text-gray-500 flex items-center gap-1">
+              <Calendar size={13} className="text-amber-500" />
+              Filter by Month:
+            </span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+            />
+            <button
+              onClick={() => setQuickMonth(0)}
+              className="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium rounded-lg transition-colors"
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setQuickMonth(-1)}
+              className="px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium rounded-lg transition-colors"
+            >
+              Last Month
+            </button>
+            {selectedMonth && (
+              <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded font-medium">
+                Active: {new Date(selectedMonth + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Search</label>
@@ -273,6 +380,7 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
                 value={singleDate}
                 onChange={(e) => {
                   setSingleDate(e.target.value);
+                  setSelectedMonth('');
                   setFromDate('');
                   setToDate('');
                 }}
@@ -287,6 +395,7 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
                 value={fromDate}
                 onChange={(e) => {
                   setFromDate(e.target.value);
+                  setSelectedMonth('');
                   setSingleDate('');
                 }}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -300,6 +409,7 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
                 value={toDate}
                 onChange={(e) => {
                   setToDate(e.target.value);
+                  setSelectedMonth('');
                   setSingleDate('');
                 }}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -418,20 +528,34 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
                     </td>
                     <td className="px-4 py-3">
                       {v.packageId ? (
-                        <span className="font-mono font-semibold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                        <button
+                          onClick={() => handleViewPackage(v.packageId)}
+                          className="font-mono font-semibold text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 group"
+                          title="Click to view linked package details"
+                        >
                           {v.packageId}
-                        </span>
+                          <Eye size={11} className="text-blue-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ) : (
                         <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-gray-900 text-xs">{v.guestName}</div>
-                      {v.remarks && (
-                        <div className="text-xs text-gray-400 line-clamp-1 italic">
-                          {v.remarks}
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] flex items-center justify-center flex-shrink-0 border border-slate-200">
+                          {getInitials(v.guestName)}
                         </div>
-                      )}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-gray-900 text-xs">
+                            {formatName(v.guestName)}
+                          </div>
+                          {v.remarks && (
+                            <div className="text-[11px] text-gray-400 line-clamp-1 italic">
+                              {v.remarks}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-semibold text-xs">
@@ -496,6 +620,11 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
       </div>
 
       {/* Modal */}
+      <PackageDetailsModal
+        isOpen={!!selectedViewPkg}
+        onClose={() => setSelectedViewPkg(null)}
+        pkg={selectedViewPkg}
+      />
       <VehicleModal
         isOpen={showModal}
         onClose={() => {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Package from '@/models/Package';
+import VehicleLog from '@/models/VehicleLog';
+import { syncToCloud } from '@/lib/cloudSync';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,14 +59,41 @@ export async function POST(request: NextRequest) {
   try {
     await connectDB();
     const body = await request.json();
+    const { fleetLogs, ...packageData } = body;
 
     // Auto-calc balance
-    const packageAmount = Number(body.packageAmount) || 0;
-    const advancePaid = Number(body.advancePaid) || 0;
-    body.balancePending = packageAmount - advancePaid;
+    const packageAmount = Number(packageData.packageAmount) || 0;
+    const advancePaid = Number(packageData.advancePaid) || 0;
+    packageData.balancePending = packageAmount - advancePaid;
 
-    const pkg = new Package(body);
+    const pkg = new Package(packageData);
     await pkg.save();
+
+    // If daily fleet logs were submitted, save them linked to this new package's bookingId
+    if (Array.isArray(fleetLogs) && fleetLogs.length > 0) {
+      for (const flog of fleetLogs) {
+        if (!flog.operationDate) continue;
+        const opDate = new Date(flog.operationDate);
+        const vLog = new VehicleLog({
+          operationDate: opDate,
+          packageId: pkg.bookingId,
+          guestName: flog.guestName || pkg.guestName,
+          paxInVehicle: Number(flog.paxInVehicle) || pkg.totalPax || 1,
+          vehicleType: flog.vehicleType || '',
+          vehicleNumber: flog.vehicleNumber || '',
+          vendorName: flog.vendorName || '',
+          driverName: flog.driverName || '',
+          driverPhone: flog.driverPhone || '',
+          dutyRoute: flog.dutyRoute || '',
+          remarks: flog.remarks || '',
+        });
+        await vLog.save();
+        syncToCloud('vehiclelogs', 'insert', vLog.toObject());
+      }
+    }
+
+    // Mirror to cloud (non-blocking)
+    syncToCloud('packages', 'insert', pkg.toObject());
 
     return NextResponse.json(JSON.parse(JSON.stringify(pkg)), { status: 201 });
   } catch (error) {

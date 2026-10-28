@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { X, Save, Loader2, Link as LinkIcon } from 'lucide-react';
+import { X, Save, Loader2, Link as LinkIcon, Eye } from 'lucide-react';
 import { ToastMessage } from './Toast';
+import PackageDetailsModal from './PackageDetailsModal';
 
 interface VehicleFormData {
   operationDate: string;
@@ -72,8 +73,9 @@ export default function VehicleModal({
 }: VehicleModalProps) {
   const [form, setForm] = useState<VehicleFormData>(defaultForm);
   const [loading, setLoading] = useState(false);
-  const [packageOptions, setPackageOptions] = useState<PackageOption[]>([]);
+  const [packageOptions, setPackageOptions] = useState<any[]>([]);
   const [loadingPackages, setLoadingPackages] = useState(false);
+  const [showPkgDetails, setShowPkgDetails] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -210,6 +212,18 @@ export default function VehicleModal({
                 </option>
               ))}
             </select>
+            {form.packageId && (
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowPkgDetails(true)}
+                  className="text-xs text-amber-800 hover:text-amber-950 font-semibold inline-flex items-center gap-1.5 bg-amber-100/70 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Eye size={12} className="text-amber-700" />
+                  View "{form.packageId}" Package Details
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -386,6 +400,12 @@ export default function VehicleModal({
           </button>
         </div>
       </div>
+
+      <PackageDetailsModal
+        isOpen={showPkgDetails}
+        onClose={() => setShowPkgDetails(false)}
+        pkg={packageOptions.find((p) => p.bookingId === form.packageId) || null}
+      />
     </div>
   );
 }

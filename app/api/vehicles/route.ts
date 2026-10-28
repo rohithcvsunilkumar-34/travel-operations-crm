@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import VehicleLog from '@/models/VehicleLog';
+import { syncToCloud } from '@/lib/cloudSync';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,11 +12,16 @@ export async function GET(request: NextRequest) {
     const fromDate = searchParams.get('fromDate');
     const toDate = searchParams.get('toDate');
     const date = searchParams.get('date');
+    const packageId = searchParams.get('packageId');
     const search = searchParams.get('search');
     const sort = searchParams.get('sort') || 'asc';
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: any = {};
+
+    if (packageId) {
+      query.packageId = packageId;
+    }
 
     if (date) {
       const d = new Date(date);
@@ -61,6 +67,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const log = new VehicleLog(body);
     await log.save();
+
+    // Mirror to cloud
+    syncToCloud('vehiclelogs', 'insert', log.toObject());
+
     return NextResponse.json(JSON.parse(JSON.stringify(log)), { status: 201 });
   } catch (error) {
     console.error('POST /api/vehicles error:', error);

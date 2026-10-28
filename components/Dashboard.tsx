@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, CalendarCheck, Truck, Package as PackageIcon, Menu,
-  ChevronLeft, ChevronRight, RefreshCw, Download
+  ChevronLeft, ChevronRight, RefreshCw, Download, FileText, CalendarDays, LogOut
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import KPICard from './KPICard';
@@ -11,7 +11,9 @@ import PackagesTab from './PackagesTab';
 import FleetTab from './FleetTab';
 import CleanupTab from './CleanupTab';
 import Toast, { ToastMessage } from './Toast';
+import CustomReportModal from './CustomReportModal';
 import * as XLSX from 'xlsx';
+import { exportMasterReportPDF } from '@/lib/pdfExport';
 
 interface KPIData {
   checkInsToday: number;
@@ -46,6 +48,7 @@ export default function Dashboard() {
   const [kpi, setKpi] = useState<KPIData | null>(null);
   const [kpiLoading, setKpiLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [showCustomReportModal, setShowCustomReportModal] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const addToast = useCallback((msg: Omit<ToastMessage, 'id'>) => {
@@ -74,6 +77,15 @@ export default function Dashboard() {
   useEffect(() => {
     fetchKPI();
   }, [fetchKPI]);
+
+  const handleLogout = async () => {
+    if (!confirm('Are you sure you want to sign out of the CRM?')) return;
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      window.location.href = '/login';
+    }
+  };
 
   const downloadFullReport = async () => {
     try {
@@ -176,6 +188,22 @@ export default function Dashboard() {
     }
   };
 
+  const downloadFullReportPDF = async () => {
+    try {
+      addToast({ type: 'info', message: 'Generating Master PDF Report...' });
+      const [pkgRes, vehRes] = await Promise.all([
+        fetch('/api/packages?sort=asc'),
+        fetch('/api/vehicles?sort=asc'),
+      ]);
+      const packages = pkgRes.ok ? await pkgRes.json() : [];
+      const vehicles = vehRes.ok ? await vehRes.json() : [];
+      exportMasterReportPDF(packages, vehicles, kpi, selectedDate);
+      addToast({ type: 'success', message: 'Master PDF report opened!' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to generate PDF report' });
+    }
+  };
+
   const isToday = selectedDate === getTodayISO();
 
   return (
@@ -264,12 +292,42 @@ export default function Dashboard() {
               )}
 
               <button
+                onClick={() => setShowCustomReportModal(true)}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-xl transition-opacity hover:opacity-90 shadow-sm"
+                style={{ backgroundColor: '#FF9F1C' }}
+                title="Download PDF/Excel by Month Name, Custom Date Range, or Guest Name"
+              >
+                <CalendarDays size={14} />
+                Custom Month/Range Report
+              </button>
+
+              <button
+                onClick={downloadFullReportPDF}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-xl transition-opacity hover:opacity-90 shadow-sm"
+                style={{ backgroundColor: '#DC2626' }}
+                title="Download Master Operations PDF Report"
+              >
+                <FileText size={14} />
+                Master PDF
+              </button>
+
+              <button
                 onClick={downloadFullReport}
                 className="hidden sm:flex items-center gap-2 px-3 py-2 text-xs font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
                 style={{ backgroundColor: '#0B192C' }}
+                title="Download Master Excel (.xlsx) Report"
               >
                 <Download size={14} />
-                Master Report
+                Excel Report
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 hover:text-red-600 bg-gray-100 hover:bg-red-50 rounded-xl transition-colors border border-gray-200"
+                title="Sign out of CRM"
+              >
+                <LogOut size={14} />
+                <span className="hidden md:inline">Sign Out</span>
               </button>
             </div>
           </div>
@@ -386,11 +444,25 @@ export default function Dashboard() {
                         <span className="text-sm font-semibold text-white">Log Vehicle</span>
                       </button>
                       <button
+                        onClick={() => setShowCustomReportModal(true)}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-200/70"
+                      >
+                        <CalendarDays size={18} className="text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-900">Custom Month / Range PDF</span>
+                      </button>
+                      <button
+                        onClick={downloadFullReportPDF}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-red-50 hover:bg-red-100 transition-colors border border-red-200/60"
+                      >
+                        <FileText size={18} className="text-red-600" />
+                        <span className="text-sm font-semibold text-red-700">Download Master PDF</span>
+                      </button>
+                      <button
                         onClick={downloadFullReport}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-gray-100 hover:bg-gray-200 transition-colors"
                       >
                         <Download size={18} className="text-gray-700" />
-                        <span className="text-sm font-semibold text-gray-700">Download Master Report</span>
+                        <span className="text-sm font-semibold text-gray-700">Download Master Excel</span>
                       </button>
                     </div>
                   </div>
@@ -433,6 +505,13 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* Custom Report (Month / Range / Name) Modal */}
+      <CustomReportModal
+        isOpen={showCustomReportModal}
+        onClose={() => setShowCustomReportModal(false)}
+        addToast={addToast}
+      />
     </div>
   );
 }

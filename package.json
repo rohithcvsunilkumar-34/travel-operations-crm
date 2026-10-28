@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "node scripts/seed.mjs",
-    "clear": "node scripts/clear.mjs"
+    "clear": "node scripts/clear.mjs",
+    "sync:up": "node scripts/sync.mjs push",
+    "sync:down": "node scripts/sync.mjs pull",
+    "sync:status": "node scripts/sync.mjs status"
   },
   "dependencies": {
     "next": "14.2.5",

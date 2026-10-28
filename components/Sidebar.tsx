@@ -1,5 +1,6 @@
 'use client';
-import { LayoutDashboard, Package, Truck, ClipboardList, Trash2, Menu, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Package, Truck, ClipboardList, Trash2, X, LogOut, User, Shield } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -16,6 +17,32 @@ const navItems = [
 ];
 
 export default function Sidebar({ activeTab, setActiveTab, sidebarOpen, setSidebarOpen }: SidebarProps) {
+  const [username, setUsername] = useState('admin');
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.username) {
+          setUsername(data.username);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    if (!confirm('Are you sure you want to log out of TravelOps CRM?')) return;
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <>
       {/* Mobile overlay */}
@@ -78,10 +105,37 @@ export default function Sidebar({ activeTab, setActiveTab, sidebarOpen, setSideb
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-white/10">
-          <p className="text-white/30 text-xs text-center">Travel CRM v1.0</p>
-          <p className="text-white/20 text-xs text-center mt-1">Local MongoDB Edition</p>
+        {/* User Profile & Sign Out Footer */}
+        <div className="p-4 border-t border-white/10 space-y-3">
+          <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                {username.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-semibold text-white truncate capitalize">
+                  {username}
+                </div>
+                <div className="text-[10px] text-white/50 flex items-center gap-1">
+                  <Shield size={10} className="text-amber-400" />
+                  <span>Authenticated</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="p-1.5 rounded-lg text-white/60 hover:text-red-400 hover:bg-white/10 transition-colors"
+              title="Sign Out / Lock CRM"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+
+          <div className="text-[11px] text-white/30 text-center">
+            Travel CRM &bull; Protected Session
+          </div>
         </div>
       </aside>
     </>

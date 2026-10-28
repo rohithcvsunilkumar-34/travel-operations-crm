@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Trash2, ShieldCheck, Download, AlertTriangle, RefreshCw,
-  HardDrive, Calendar, Database, CheckCircle, Clock
+  HardDrive, Calendar, Database, CheckCircle, Clock,
+  Cloud, CloudOff, ArrowUpRight, ArrowDownLeft, Loader2
 } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import * as XLSX from 'xlsx';
@@ -81,6 +82,15 @@ export default function CleanupTab({ addToast }: CleanupTabProps) {
   const [totalPackages, setTotalPackages] = useState<number>(0);
   const [totalVehicles, setTotalVehicles] = useState<number>(0);
 
+  // Cloud Sync state
+  const [syncStatus, setSyncStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+    message?: string;
+    cloudCounts?: { packages: number; vehicles: number; tasks: number };
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
   // Confirmation modal
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -128,10 +138,51 @@ export default function CleanupTab({ addToast }: CleanupTabProps) {
     }
   }, []);
 
+  const fetchSyncStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sync');
+      if (res.ok) {
+        setSyncStatus(await res.json());
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const triggerSync = async (direction: 'push' | 'pull') => {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast({
+          type: 'success',
+          message:
+            direction === 'push'
+              ? `Synced ${data.synced?.packages || 0} packages and ${data.synced?.vehicles || 0} vehicles to Cloud Atlas!`
+              : `Restored ${data.synced?.packages || 0} packages and ${data.synced?.vehicles || 0} vehicles from Cloud Atlas!`,
+        });
+        fetchSyncStatus();
+        fetchOverallStats();
+      } else {
+        addToast({ type: 'error', message: data.error || 'Sync failed' });
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Failed to communicate with sync endpoint' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     scanAutoPurge();
     fetchOverallStats();
-  }, [scanAutoPurge, fetchOverallStats]);
+    fetchSyncStatus();
+  }, [scanAutoPurge, fetchOverallStats, fetchSyncStatus]);
 
   const generateAndDownloadExcel = (data: CleanupData, filename: string): boolean => {
     if (data.packages.length === 0 && data.vehicleLogs.length === 0) {
@@ -417,6 +468,79 @@ export default function CleanupTab({ addToast }: CleanupTabProps) {
               travel_operations_crm
             </div>
             <div className="text-[10px] text-gray-400">127.0.0.1:27017</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hybrid Local + Cloud Sync Card */}
+      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                syncStatus?.connected
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {syncStatus?.connected ? <Cloud size={24} /> : <CloudOff size={24} />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-heading font-bold text-lg text-gray-900">
+                  Hybrid Local + Cloud Sync
+                </h3>
+                {syncStatus?.connected ? (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                    🟢 Cloud Connected
+                  </span>
+                ) : syncStatus?.configured ? (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                    ⚠️ Cloud Configured (Offline)
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    ⚪ Local Storage Only
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                {syncStatus?.connected
+                  ? `Real-time dual-write is ACTIVE. Every new booking or fleet log writes to your laptop instantly and mirrors to MongoDB Atlas in the cloud. Cloud has: ${
+                      syncStatus.cloudCounts?.packages ?? 0
+                    } packages, ${syncStatus.cloudCounts?.vehicles ?? 0} vehicles.`
+                  : syncStatus?.configured
+                  ? 'Cloud connection configured in .env.local, but currently cannot reach MongoDB Atlas. Check your internet connection or IP whitelist.'
+                  : 'To enable automatic cloud backup & remote sync, add MONGODB_ATLAS_URI to your .env.local file. All changes will sync seamlessly in the background.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => triggerSync('push')}
+              disabled={syncing || !syncStatus?.connected}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white rounded-xl transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ backgroundColor: '#0B192C' }}
+            >
+              {syncing ? <Loader2 size={14} className="animate-spin" /> : <ArrowUpRight size={14} />}
+              <span>Push All to Cloud</span>
+            </button>
+            <button
+              onClick={() => triggerSync('pull')}
+              disabled={syncing || !syncStatus?.connected}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-40"
+            >
+              {syncing ? <Loader2 size={14} className="animate-spin" /> : <ArrowDownLeft size={14} />}
+              <span>Restore from Cloud</span>
+            </button>
+            <button
+              onClick={fetchSyncStatus}
+              className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Refresh Cloud Sync Status"
+            >
+              <RefreshCw size={14} />
+            </button>
           </div>
         </div>
       </div>

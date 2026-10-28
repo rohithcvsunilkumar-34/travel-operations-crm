@@ -2,12 +2,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Download, ArrowUpDown, ArrowUp, ArrowDown,
-  Edit, Trash2, MapPin, ChevronDown, ChevronUp, Eye, Filter
+  Edit, Trash2, MapPin, ChevronDown, ChevronUp, Eye, Filter, FileText, Calendar, Phone
 } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import PackageModal from './PackageModal';
 import DailyLogModal from './DailyLogModal';
+import PackageDetailsModal from './PackageDetailsModal';
+import { formatName, getInitials, getStatusConfig } from '@/lib/formatters';
 import * as XLSX from 'xlsx';
+import { exportPackagesReportPDF, exportSinglePackagePDF } from '@/lib/pdfExport';
 
 interface DailyLog {
   dayNumber: number;
@@ -61,11 +64,13 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [agency, setAgency] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showModal, setShowModal] = useState(false);
   const [editPkg, setEditPkg] = useState<Package | undefined>(undefined);
+  const [viewPkg, setViewPkg] = useState<Package | null>(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [logPkg, setLogPkg] = useState<Package | undefined>(undefined);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -210,10 +215,69 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
     }
   };
 
+  const handleMonthChange = (monthStr: string) => {
+    setSelectedMonth(monthStr);
+    if (!monthStr) {
+      setFromDate('');
+      setToDate('');
+      return;
+    }
+    const [year, month] = monthStr.split('-').map(Number);
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    setFromDate(start);
+    setToDate(end);
+  };
+
+  const setQuickMonth = (offset: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + offset);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+    handleMonthChange(monthStr);
+  };
+
+  const downloadPDF = () => {
+    if (packages.length === 0) {
+      addToast({ type: 'warning', message: 'No packages to export' });
+      return;
+    }
+    const filterInfo = selectedMonth
+      ? `Month: ${new Date(selectedMonth + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`
+      : search
+      ? `Search: "${search}"`
+      : fromDate || toDate
+      ? `Date Range: ${formatDate(fromDate)} to ${formatDate(toDate)}`
+      : undefined;
+
+    exportPackagesReportPDF(packages, filterInfo);
+    addToast({ type: 'success', message: 'Packages PDF preview ready!' });
+  };
+
+  const downloadSinglePackagePDF = async (pkg: Package) => {
+    try {
+      addToast({ type: 'info', message: `Preparing updated voucher for ${formatName(pkg.guestName)}...` });
+      const res = await fetch(`/api/packages/${pkg._id}`);
+      if (res.ok) {
+        const fullPkg = await res.json();
+        exportSinglePackagePDF(fullPkg, fullPkg.fleetLogs || []);
+        addToast({ type: 'success', message: `Voucher PDF ready for ${pkg.bookingId}!` });
+      } else {
+        exportSinglePackagePDF(pkg, []);
+        addToast({ type: 'success', message: `Voucher PDF ready for ${pkg.bookingId}!` });
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Failed to generate package voucher PDF' });
+    }
+  };
+
   const clearFilters = () => {
     setSearch('');
     setFromDate('');
     setToDate('');
+    setSelectedMonth('');
     setAgency('');
     setStatusFilter('all');
     setSortDir('asc');
@@ -237,6 +301,15 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
             {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           <button
+            onClick={downloadPDF}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white rounded-xl transition-opacity hover:opacity-90 shadow-sm"
+            style={{ backgroundColor: '#DC2626' }}
+            title="Download Filtered Packages PDF"
+          >
+            <FileText size={16} />
+            Export PDF
+          </button>
+          <button
             onClick={downloadExcel}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-xl transition-opacity hover:opacity-90"
             style={{ backgroundColor: '#0B192C' }}
@@ -257,7 +330,38 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+          {/* Quick Month Bar */}
+          <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-gray-100 text-xs">
+            <span className="font-semibold text-gray-500 flex items-center gap-1">
+              <Calendar size={13} className="text-amber-500" />
+              Filter by Month:
+            </span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+            />
+            <button
+              onClick={() => setQuickMonth(0)}
+              className="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium rounded-lg transition-colors"
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setQuickMonth(-1)}
+              className="px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium rounded-lg transition-colors"
+            >
+              Last Month
+            </button>
+            {selectedMonth && (
+              <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded font-medium">
+                Active: {new Date(selectedMonth + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Search</label>
@@ -277,7 +381,10 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
               <input
                 type="date"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setSelectedMonth('');
+                }}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
@@ -286,7 +393,10 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
               <input
                 type="date"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setSelectedMonth('');
+                }}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
@@ -387,17 +497,44 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                     <tr key={pkg._id} className="table-row-hover transition-colors">
                       <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
                       <td className="px-4 py-3">
-                        <span className="font-mono font-semibold text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">
+                        <button
+                          onClick={() => setViewPkg(pkg)}
+                          className="font-mono font-semibold text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Click to view package details"
+                        >
                           {pkg.bookingId}
-                        </span>
+                        </button>
                       </td>
                       <td className="px-4 py-3">
-                        <div>
-                          <div className="font-semibold text-gray-900">{pkg.guestName}</div>
-                          <div className="text-xs text-gray-400">{pkg.contactNumber}</div>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 text-white font-heading font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-sm ring-2 ring-amber-100">
+                            {getInitials(pkg.guestName)}
+                          </div>
+                          <div className="min-w-0">
+                            <button
+                              onClick={() => setViewPkg(pkg)}
+                              className="text-left font-semibold text-gray-900 hover:text-amber-600 transition-colors cursor-pointer truncate block max-w-[180px]"
+                              title={`Click to view details for ${formatName(pkg.guestName)}`}
+                            >
+                              {formatName(pkg.guestName)}
+                            </button>
+                            {pkg.contactNumber ? (
+                              <a
+                                href={`tel:${pkg.contactNumber}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-gray-400 hover:text-blue-600 transition-colors flex items-center gap-1 font-mono"
+                                title="Call guest"
+                              >
+                                <Phone size={10} className="text-gray-400" />
+                                {pkg.contactNumber}
+                              </a>
+                            ) : (
+                              <div className="text-xs text-gray-400">—</div>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{pkg.agencyName}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs font-medium">{pkg.agencyName || 'Direct'}</td>
                       <td className="px-4 py-3 text-gray-700 font-medium text-xs">{formatDate(pkg.checkInDate)}</td>
                       <td className="px-4 py-3 text-gray-700 text-xs">{formatDate(pkg.checkOutDate)}</td>
                       <td className="px-4 py-3 text-center">
@@ -410,12 +547,39 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_STYLES[pkg.status] || ''}`}>
-                          {pkg.status}
-                        </span>
+                        {(() => {
+                          const statusConf = getStatusConfig(pkg.status);
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${statusConf.className}`}
+                              title={statusConf.description}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${statusConf.dot} ${statusConf.pulse ? 'animate-pulse' : ''}`}
+                              />
+                              {statusConf.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
+                          <button
+                            title="View Package Details"
+                            onClick={() => setViewPkg(pkg)}
+                            className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors text-blue-600 flex items-center gap-1"
+                          >
+                            <Eye size={15} />
+                            <span className="text-xs font-semibold hidden 2xl:inline">View</span>
+                          </button>
+                          <button
+                            title="Download Full Package Voucher PDF"
+                            onClick={() => downloadSinglePackagePDF(pkg)}
+                            className="p-1.5 rounded-lg hover:bg-rose-50 transition-colors text-rose-600 flex items-center gap-1"
+                          >
+                            <FileText size={15} />
+                            <span className="text-xs font-semibold hidden 2xl:inline">PDF</span>
+                          </button>
                           <button
                             title="View/Edit Itinerary"
                             onClick={() => { setLogPkg(pkg); setShowLogModal(true); }}
@@ -427,7 +591,7 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                           <button
                             title="Edit Package"
                             onClick={() => { setEditPkg(pkg); setShowModal(true); }}
-                            className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors text-blue-600"
+                            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
                           >
                             <Edit size={15} />
                           </button>
@@ -444,7 +608,7 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                               onClick={() => toggleRow(pkg._id)}
                               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
                             >
-                              {expandedRows.has(pkg._id) ? <ChevronUp size={15} /> : <Eye size={15} />}
+                              {expandedRows.has(pkg._id) ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                             </button>
                           )}
                         </div>
@@ -484,6 +648,21 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
       </div>
 
       {/* Modals */}
+      <PackageDetailsModal
+        isOpen={!!viewPkg}
+        onClose={() => setViewPkg(null)}
+        pkg={viewPkg as any}
+        onEdit={(p) => {
+          setViewPkg(null);
+          setEditPkg(p as any);
+          setShowModal(true);
+        }}
+        onOpenItinerary={(p) => {
+          setViewPkg(null);
+          setLogPkg(p as any);
+          setShowLogModal(true);
+        }}
+      />
       <PackageModal
         isOpen={showModal}
         onClose={() => { setShowModal(false); setEditPkg(undefined); }}

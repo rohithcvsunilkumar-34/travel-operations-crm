@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import DailyTask from '@/models/DailyTask';
+import { syncToCloud } from '@/lib/cloudSync';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,10 @@ export async function PUT(
     const body = await request.json();
     const task = await DailyTask.findByIdAndUpdate(params.id, body, { new: true }).lean();
     if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Mirror to cloud
+    syncToCloud('dailytasks', 'update', { _id: params.id, ...body });
+
     return NextResponse.json(JSON.parse(JSON.stringify(task)));
   } catch (error) {
     console.error('PUT /api/tasks/[id] error:', error);
@@ -28,6 +33,10 @@ export async function DELETE(
     await connectDB();
     const task = await DailyTask.findByIdAndDelete(params.id).lean();
     if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Mirror to cloud
+    syncToCloud('dailytasks', 'delete', params.id);
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/tasks/[id] error:', error);
