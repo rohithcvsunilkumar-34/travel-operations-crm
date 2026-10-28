@@ -2,10 +2,11 @@
 import { useState, useEffect } from 'react';
 import {
   X, Calendar, Users, Phone, Building2, IndianRupee,
-  MapPin, Hotel, Clock, Edit, Check, Copy, ExternalLink, UserCheck, Truck, Download, FileText
+  MapPin, Hotel, Clock, Edit, Check, Copy, ExternalLink, UserCheck, Truck, Download, FileText, MessageCircle, CreditCard
 } from 'lucide-react';
 import { formatName, getInitials, getStatusConfig, formatDisplayCurrency } from '@/lib/formatters';
 import { exportSinglePackagePDF } from '@/lib/pdfExport';
+import { getGuestWhatsAppLink, getDriverDutyWhatsAppLink } from '@/lib/whatsapp';
 
 interface DailyLog {
   dayNumber: number;
@@ -41,6 +42,7 @@ interface PackageDetailsModalProps {
   pkg: PackageDetailData | null;
   onEdit?: (pkg: PackageDetailData) => void;
   onOpenItinerary?: (pkg: PackageDetailData) => void;
+  onRecordPayment?: (pkg: PackageDetailData) => void;
 }
 
 function formatDate(dateStr?: string): string {
@@ -63,6 +65,7 @@ export default function PackageDetailsModal({
   pkg,
   onEdit,
   onOpenItinerary,
+  onRecordPayment,
 }: PackageDetailsModalProps) {
   const [copied, setCopied] = useState(false);
   const [fleetLogs, setFleetLogs] = useState<any[]>([]);
@@ -152,6 +155,18 @@ export default function PackageDetailsModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {pkg.contactNumber && (
+              <a
+                href={getGuestWhatsAppLink(pkg, fleetLogs)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all border border-emerald-500"
+                title="Send Confirmed Itinerary to Guest on WhatsApp"
+              >
+                <MessageCircle size={14} />
+                <span className="hidden sm:inline">WhatsApp Itinerary</span>
+              </a>
+            )}
             <button
               onClick={handleDownloadPDF}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-sm transition-all border border-white/10 shadow-sm"
@@ -199,7 +214,22 @@ export default function PackageDetailsModal({
           </div>
 
           {/* Financial Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Financial Overview
+              </h3>
+              {onRecordPayment && (
+                <button
+                  onClick={() => onRecordPayment(pkg)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors border border-emerald-200"
+                >
+                  <CreditCard size={13} />
+                  Record Payment
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
               <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
                 <IndianRupee size={13} className="text-blue-500" />
@@ -230,6 +260,7 @@ export default function PackageDetailsModal({
               </div>
             </div>
           </div>
+        </div>
 
           {/* Guest & Trip Key Details */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
@@ -461,12 +492,22 @@ export default function PackageDetailsModal({
                         </div>
                       )}
                       {log.driverPhone && (
-                        <div>
+                        <div className="flex items-center gap-2">
                           <a
                             href={`tel:${log.driverPhone}`}
                             className="text-blue-600 hover:underline flex items-center gap-1 font-mono"
                           >
                             <Phone size={10} /> {log.driverPhone}
+                          </a>
+                          <a
+                            href={getDriverDutyWhatsAppLink(log, pkg)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold flex items-center gap-1 text-[11px] border border-emerald-200 transition-colors"
+                            title="Dispatch Duty Slip to Driver on WhatsApp"
+                          >
+                            <MessageCircle size={10} />
+                            <span>WhatsApp Duty</span>
                           </a>
                         </div>
                       )}

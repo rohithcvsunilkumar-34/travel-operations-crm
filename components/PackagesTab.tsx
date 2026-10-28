@@ -2,15 +2,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Download, ArrowUpDown, ArrowUp, ArrowDown,
-  Edit, Trash2, MapPin, ChevronDown, ChevronUp, Eye, Filter, FileText, Calendar, Phone
+  Edit, Trash2, MapPin, ChevronDown, ChevronUp, Eye, Filter, FileText, Calendar, Phone, MessageCircle, CreditCard
 } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import PackageModal from './PackageModal';
 import DailyLogModal from './DailyLogModal';
 import PackageDetailsModal from './PackageDetailsModal';
+import RecordPaymentModal from './RecordPaymentModal';
 import { formatName, getInitials, getStatusConfig } from '@/lib/formatters';
 import * as XLSX from 'xlsx';
 import { exportPackagesReportPDF, exportSinglePackagePDF } from '@/lib/pdfExport';
+import { getGuestWhatsAppLink } from '@/lib/whatsapp';
 
 interface DailyLog {
   dayNumber: number;
@@ -73,6 +75,8 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
   const [viewPkg, setViewPkg] = useState<Package | null>(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [logPkg, setLogPkg] = useState<Package | undefined>(undefined);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentPkg, setPaymentPkg] = useState<Package | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
 
@@ -580,6 +584,27 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                             <FileText size={15} />
                             <span className="text-xs font-semibold hidden 2xl:inline">PDF</span>
                           </button>
+                          {pkg.contactNumber && (
+                            <a
+                              href={getGuestWhatsAppLink(pkg, [])}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors text-emerald-600 flex items-center"
+                              title={`Send itinerary to ${formatName(pkg.guestName)} on WhatsApp`}
+                            >
+                              <MessageCircle size={15} />
+                            </a>
+                          )}
+                          <button
+                            title="Record Payment & Generate Receipt"
+                            onClick={() => {
+                              setPaymentPkg(pkg);
+                              setShowPaymentModal(true);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors text-emerald-600 flex items-center"
+                          >
+                            <CreditCard size={15} />
+                          </button>
                           <button
                             title="View/Edit Itinerary"
                             onClick={() => { setLogPkg(pkg); setShowLogModal(true); }}
@@ -662,6 +687,21 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
           setLogPkg(p as any);
           setShowLogModal(true);
         }}
+        onRecordPayment={(p) => {
+          setViewPkg(null);
+          setPaymentPkg(p as any);
+          setShowPaymentModal(true);
+        }}
+      />
+      <RecordPaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setPaymentPkg(null);
+        }}
+        pkg={paymentPkg}
+        onPaymentRecorded={fetchPackages}
+        addToast={addToast}
       />
       <PackageModal
         isOpen={showModal}

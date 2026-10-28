@@ -59,6 +59,10 @@ const PackageSchema = new Schema<IPackage>(
   { timestamps: true }
 );
 
+PackageSchema.index({ checkInDate: 1, checkOutDate: 1 });
+PackageSchema.index({ status: 1, checkInDate: 1 });
+PackageSchema.index({ guestName: 'text', bookingId: 'text', agencyName: 'text' });
+
 // Auto-generate unique bookingId before save
 PackageSchema.pre('save', async function (next) {
   if (!this.bookingId) {

@@ -757,4 +757,115 @@ export function exportSinglePackagePDF(pkg: any, fleetLogs: any[] = []) {
   openPrintWindow(`Voucher_${pkg.bookingId || 'Package'}_${formattedName.replace(/\s+/g, '_')}`, html, 'portrait');
 }
 
+export function exportPaymentReceiptPDF(receipt: any): void {
+  const formattedName = formatName(receipt.guestName);
+  const formattedAmount = formatCurrency(receipt.amount);
+
+  const html = `
+    <!-- Letterhead -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0B192C; padding-bottom: 14px; margin-bottom: 18px;">
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #0B192C; letter-spacing: -0.5px;">EASYTOEXPLORE TRAVEL OPERATIONS</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Official Tour Operations & Financial Accounting</div>
+        <div style="font-size: 10px; color: #94a3b8;">Email: operations@easytoexplore.com | Customer Support: +91 98765 43210</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="display: inline-block; background: #059669; color: white; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; text-transform: uppercase;">
+          Payment Receipt
+        </div>
+        <div style="font-size: 11px; font-family: monospace; font-weight: 700; color: #0B192C; margin-top: 4px;">Receipt: ${receipt.receiptNo}</div>
+        <div style="font-size: 10px; color: #64748b;">Date: ${formatDate(receipt.receiptDate)}</div>
+      </div>
+    </div>
+
+    <!-- Amount Received Highlight Banner -->
+    <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: 0.5px;">Amount Received With Thanks</div>
+        <div style="font-size: 24px; font-weight: 800; color: #15803d; margin-top: 2px;">${formattedAmount}</div>
+      </div>
+      <div style="text-align: right;">
+        <span style="background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; border: 1px solid #bbf7d0;">
+          Mode: ${receipt.paymentMode || 'UPI'}
+        </span>
+        ${receipt.transactionId ? `<div style="font-size: 10px; font-family: monospace; color: #374151; margin-top: 4px;">Ref/Txn: ${receipt.transactionId}</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Guest & Package Details Table -->
+    <table style="margin-bottom: 18px;">
+      <thead>
+        <tr>
+          <th colspan="2" style="background: #0B192C; color: white; font-size: 11px;">Guest & Booking Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="width: 35%; font-weight: 600; color: #64748b;">Guest Name:</td>
+          <td style="font-weight: 700; color: #0f172a; font-size: 12px;">${formattedName}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #64748b;">Booking Reference ID:</td>
+          <td style="font-family: monospace; font-weight: 700; color: #b45309;">${receipt.bookingId}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #64748b;">Contact Number:</td>
+          <td style="font-family: monospace;">${receipt.contactNumber || '—'}</td>
+        </tr>
+        ${receipt.notes ? `<tr><td style="font-weight: 600; color: #64748b;">Payment Notes:</td><td style="color: #475569; font-style: italic;">${receipt.notes}</td></tr>` : ''}
+      </tbody>
+    </table>
+
+    <!-- Ledger & Financial Summary -->
+    <table style="margin-bottom: 24px;">
+      <thead>
+        <tr>
+          <th style="background: #1e293b; color: white; font-size: 11px;">Financial Description</th>
+          <th style="background: #1e293b; color: white; font-size: 11px; text-align: right; width: 140px;">Amount (INR)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color: #334155;">Total Package Agreed Amount</td>
+          <td style="text-align: right; font-weight: 700; color: #0f172a;">${formatCurrency(receipt.packageAmount)}</td>
+        </tr>
+        <tr>
+          <td style="color: #334155;">Previous Advances Received</td>
+          <td style="text-align: right; color: #64748b;">${formatCurrency(receipt.previousAdvance)}</td>
+        </tr>
+        <tr style="background: #f0fdf4;">
+          <td style="font-weight: 700; color: #166534;">Current Payment Received (${receipt.paymentMode})</td>
+          <td style="text-align: right; font-weight: 800; color: #15803d; font-size: 13px;">+ ${formattedAmount}</td>
+        </tr>
+        <tr style="border-top: 1.5px solid #0B192C;">
+          <td style="font-weight: 700; color: #0f172a;">Total Amount Received to Date</td>
+          <td style="text-align: right; font-weight: 700; color: #0f172a;">${formatCurrency(receipt.totalPaidToDate)}</td>
+        </tr>
+        <tr style="background: ${receipt.balancePending > 0 ? '#fff1f2' : '#f0fdf4'};">
+          <td style="font-weight: 800; color: ${receipt.balancePending > 0 ? '#b91c1c' : '#15803d'};">
+            ${receipt.balancePending > 0 ? 'Remaining Balance Pending' : 'Account Status: Fully Settled'}
+          </td>
+          <td style="text-align: right; font-weight: 800; color: ${receipt.balancePending > 0 ? '#b91c1c' : '#15803d'}; font-size: 13px;">
+            ${formatCurrency(receipt.balancePending)}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Terms & Sign-off Block -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; padding-top: 16px; font-size: 10px; color: #64748b;">
+      <div>
+        <div>This is a computer-generated money receipt from <strong>EasyToExplore Operations CRM</strong>.</div>
+        <div>All payments are subject to realization of cheque / online clearance.</div>
+      </div>
+      <div style="text-align: center; width: 180px;">
+        <div style="border-bottom: 1.5px solid #0B192C; height: 35px; margin-bottom: 4px;"></div>
+        <div style="font-weight: 700; color: #0B192C;">Authorized Accounts Sign</div>
+      </div>
+    </div>
+  `;
+
+  openPrintWindow(`Receipt_${receipt.receiptNo}_${formattedName.replace(/\s+/g, '_')}`, html, 'portrait');
+}
+
 

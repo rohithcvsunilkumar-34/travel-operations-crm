@@ -33,6 +33,10 @@ const VehicleLogSchema = new Schema<IVehicleLog>(
   { timestamps: true }
 );
 
+VehicleLogSchema.index({ packageId: 1, operationDate: 1 });
+VehicleLogSchema.index({ vehicleNumber: 1, operationDate: 1 });
+VehicleLogSchema.index({ driverName: 1, operationDate: 1 });
+
 const VehicleLog =
   mongoose.models.VehicleLog || mongoose.model<IVehicleLog>('VehicleLog', VehicleLogSchema);
 export default VehicleLog;

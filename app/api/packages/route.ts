@@ -44,6 +44,32 @@ export async function GET(request: NextRequest) {
     }
 
     const sortOrder = sort === 'desc' ? -1 : 1;
+    const pageParam = searchParams.get('page');
+    const limitParam = searchParams.get('limit');
+
+    if (pageParam || limitParam) {
+      const page = Math.max(1, parseInt(pageParam || '1', 10));
+      const limit = Math.max(1, parseInt(limitParam || '25', 10));
+      const skip = (page - 1) * limit;
+
+      const [total, packages] = await Promise.all([
+        Package.countDocuments(query),
+        Package.find(query)
+          .sort({ checkInDate: sortOrder })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ]);
+
+      return NextResponse.json({
+        packages: JSON.parse(JSON.stringify(packages)),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    }
+
     const packages = await Package.find(query)
       .sort({ checkInDate: sortOrder })
       .lean();

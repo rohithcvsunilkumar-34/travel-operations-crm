@@ -17,29 +17,31 @@ export async function GET(request: NextRequest) {
     const dayEnd = new Date(date);
     dayEnd.setHours(23, 59, 59, 999);
 
-    // Check-ins today
-    const checkInsToday = await Package.countDocuments({
-      checkInDate: { $gte: dayStart, $lte: dayEnd },
-    });
+    // Parallel concurrent execution for maximum speed
+    const [
+      checkInsToday,
+      vehiclesRunningToday,
+      activePackages,
+      upcomingPackages,
+    ] = await Promise.all([
+      Package.countDocuments({
+        checkInDate: { $gte: dayStart, $lte: dayEnd },
+      }),
+      VehicleLog.countDocuments({
+        operationDate: { $gte: dayStart, $lte: dayEnd },
+      }),
+      Package.find({
+        checkInDate: { $lte: dayEnd },
+        checkOutDate: { $gte: dayStart },
+        status: { $in: ['Upcoming', 'Ongoing'] },
+      }).select('totalPax').lean(),
+      Package.countDocuments({
+        checkInDate: { $gt: dayEnd },
+        status: { $ne: 'Cancelled' },
+      }),
+    ]);
 
-    // Vehicles running today
-    const vehiclesRunningToday = await VehicleLog.countDocuments({
-      operationDate: { $gte: dayStart, $lte: dayEnd },
-    });
-
-    // Total guests on ground today (active packages covering today)
-    const activePackages = await Package.find({
-      checkInDate: { $lte: dayEnd },
-      checkOutDate: { $gte: dayStart },
-      status: { $in: ['Upcoming', 'Ongoing'] },
-    }).lean();
-    const totalGuestsOnGround = activePackages.reduce((sum, p) => sum + (p.totalPax || 0), 0);
-
-    // Upcoming packages (checkIn after today)
-    const upcomingPackages = await Package.countDocuments({
-      checkInDate: { $gt: dayEnd },
-      status: { $ne: 'Cancelled' },
-    });
+    const totalGuestsOnGround = activePackages.reduce((sum, p: any) => sum + (p.totalPax || 0), 0);
 
     return NextResponse.json({
       checkInsToday,

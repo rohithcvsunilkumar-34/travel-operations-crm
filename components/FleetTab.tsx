@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Download, ArrowUpDown, ArrowUp, ArrowDown,
-  Edit, Trash2, Truck, Users, Calendar, Filter, ChevronUp, ChevronDown, Phone, FileText, Eye
+  Edit, Trash2, Truck, Users, Calendar, Filter, ChevronUp, ChevronDown, Phone, FileText, Eye, MessageCircle
 } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import VehicleModal from './VehicleModal';
@@ -10,6 +10,7 @@ import PackageDetailsModal from './PackageDetailsModal';
 import { formatName, getInitials } from '@/lib/formatters';
 import * as XLSX from 'xlsx';
 import { exportFleetReportPDF } from '@/lib/pdfExport';
+import { getDriverDutyWhatsAppLink } from '@/lib/whatsapp';
 
 interface VehicleLog {
   _id: string;
@@ -602,6 +603,17 @@ export default function FleetTab({ addToast, defaultDate }: FleetTabProps) {
                         >
                           <Edit size={15} />
                         </button>
+                        {v.driverPhone && (
+                          <a
+                            href={getDriverDutyWhatsAppLink(v)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors text-emerald-600"
+                            title="Dispatch duty slip to driver via WhatsApp"
+                          >
+                            <MessageCircle size={15} />
+                          </a>
+                        )}
                         <button
                           title="Delete vehicle log"
                           onClick={() => handleDelete(v)}

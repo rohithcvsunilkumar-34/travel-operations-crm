@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { X, Save, Loader2, Link as LinkIcon, Eye } from 'lucide-react';
+import { X, Save, Loader2, Link as LinkIcon, Eye, AlertTriangle } from 'lucide-react';
 import { ToastMessage } from './Toast';
 import PackageDetailsModal from './PackageDetailsModal';
 
@@ -76,6 +76,38 @@ export default function VehicleModal({
   const [packageOptions, setPackageOptions] = useState<any[]>([]);
   const [loadingPackages, setLoadingPackages] = useState(false);
   const [showPkgDetails, setShowPkgDetails] = useState(false);
+  const [conflicts, setConflicts] = useState<Array<{ type: string; message: string }>>([]);
+  const [checkingConflict, setCheckingConflict] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !form.operationDate || (!form.vehicleNumber.trim() && !form.driverName.trim())) {
+      setConflicts([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingConflict(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('date', form.operationDate);
+        if (form.vehicleNumber.trim()) params.set('vehicleNumber', form.vehicleNumber.trim());
+        if (form.driverName.trim()) params.set('driverName', form.driverName.trim());
+        if (editData?._id) params.set('excludeId', editData._id);
+
+        const res = await fetch(`/api/vehicles/check-conflict?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          setConflicts(data.conflicts || []);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setCheckingConflict(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [form.operationDate, form.vehicleNumber, form.driverName, editData, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -225,6 +257,23 @@ export default function VehicleModal({
               </div>
             )}
           </div>
+
+          {/* Double-Booking Conflict Warning */}
+          {conflicts.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1.5 animate-in fade-in duration-150 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-amber-900">
+                <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+                <span>⚠️ Potential Fleet Scheduling Conflict Detected:</span>
+              </div>
+              <div className="space-y-1 pl-6">
+                {conflicts.map((c, i) => (
+                  <div key={i} className="text-amber-900 font-medium leading-relaxed">
+                    • {c.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "seed": "node scripts/seed.mjs",
     "clear": "node scripts/clear.mjs",
+    "backup": "node scripts/backup.mjs",
     "sync:up": "node scripts/sync.mjs push",
     "sync:down": "node scripts/sync.mjs pull",
     "sync:status": "node scripts/sync.mjs status"
