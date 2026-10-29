@@ -42,10 +42,18 @@ export async function PUT(
     const body = await request.json();
     const { fleetLogs, deletedFleetIds, ...packageData } = body;
 
-    // Auto-calc balance
+    // Auto-calc balance and profit
     const packageAmount = Number(packageData.packageAmount) || 0;
     const advancePaid = Number(packageData.advancePaid) || 0;
-    packageData.balancePending = packageAmount - advancePaid;
+    packageData.balancePending = Math.max(0, packageAmount - advancePaid);
+
+    const hotelCost = Number(packageData.hotelCost) || 0;
+    const cabVendorCost = Number(packageData.cabVendorCost) || 0;
+    const otherExpenses = Number(packageData.otherExpenses) || 0;
+    if (!packageData.totalExpense) {
+      packageData.totalExpense = hotelCost + cabVendorCost + otherExpenses;
+    }
+    packageData.netProfit = packageAmount - packageData.totalExpense;
 
     const pkg = await Package.findByIdAndUpdate(params.id, packageData, {
       new: true,
@@ -82,6 +90,8 @@ export async function PUT(
           vehicleType: flog.vehicleType || '',
           vehicleNumber: flog.vehicleNumber || '',
           vendorName: flog.vendorName || '',
+          numberOfCabs: Number(flog.numberOfCabs) || 1,
+          vendorCost: Number(flog.vendorCost) || 0,
           driverName: flog.driverName || '',
           driverPhone: flog.driverPhone || '',
           dutyRoute: flog.dutyRoute || '',

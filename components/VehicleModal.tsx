@@ -12,6 +12,8 @@ interface VehicleFormData {
   vehicleType: string;
   vehicleNumber: string;
   vendorName: string;
+  numberOfCabs?: number;
+  vendorCost?: number;
   driverName: string;
   driverPhone: string;
   dutyRoute: string;
@@ -57,6 +59,8 @@ const defaultForm: VehicleFormData = {
   vehicleType: 'Innova Crysta',
   vehicleNumber: '',
   vendorName: '',
+  numberOfCabs: 1,
+  vendorCost: 0,
   driverName: '',
   driverPhone: '',
   dutyRoute: '',
@@ -131,6 +135,8 @@ export default function VehicleModal({
         vehicleType: editData.vehicleType || 'Innova Crysta',
         vehicleNumber: editData.vehicleNumber || '',
         vendorName: editData.vendorName || '',
+        numberOfCabs: editData.numberOfCabs ?? 1,
+        vendorCost: editData.vendorCost || 0,
         driverName: editData.driverName || '',
         driverPhone: editData.driverPhone || '',
         dutyRoute: editData.dutyRoute || '',
@@ -362,7 +368,7 @@ export default function VehicleModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 Vendor / Transporter Name
@@ -372,7 +378,19 @@ export default function VehicleModal({
                 value={form.vendorName}
                 onChange={(e) => handleChange('vendorName', e.target.value)}
                 placeholder="Vehicle owner or transport agency"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Total Cabs Allotted (Qty)
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={form.numberOfCabs ?? 1}
+                onChange={(e) => handleChange('numberOfCabs', Math.max(1, Number(e.target.value) || 1))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-bold text-gray-900"
               />
             </div>
             <div>

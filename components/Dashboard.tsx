@@ -9,7 +9,10 @@ import KPICard from './KPICard';
 import DailyTaskWidget from './DailyTaskWidget';
 import PackagesTab from './PackagesTab';
 import FleetTab from './FleetTab';
+import HotelsTab from './HotelsTab';
+import CabVendorsTab from './CabVendorsTab';
 import CleanupTab from './CleanupTab';
+import FinancialAnalyticsWidget from './FinancialAnalyticsWidget';
 import Toast, { ToastMessage } from './Toast';
 import CustomReportModal from './CustomReportModal';
 import NotificationCenter from './NotificationCenter';
@@ -492,6 +495,9 @@ export default function Dashboard() {
                 />
               </div>
 
+              {/* Dedicated Financial Overview Chart Widget */}
+              <FinancialAnalyticsWidget />
+
               {/* Bottom section: Tasks + Quick Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Daily Tasks Widget */}
@@ -574,6 +580,16 @@ export default function Dashboard() {
           {/* Fleet Tab */}
           {activeTab === 'fleet' && (
             <FleetTab addToast={addToast} defaultDate={selectedDate} />
+          )}
+
+          {/* Hotels Tab */}
+          {activeTab === 'hotels' && (
+            <HotelsTab addToast={addToast} onViewPackage={handleOpenNotificationPackage} />
+          )}
+
+          {/* Cab Vendors Tab */}
+          {activeTab === 'vendors' && (
+            <CabVendorsTab addToast={addToast} />
           )}
 
           {/* Cleanup Tab */}

@@ -8,6 +8,15 @@ export interface IDailyLog {
   dailyRemarks: string;
 }
 
+export interface IHotelAllocation {
+  hotelName: string;
+  location?: string;
+  roomType?: string;
+  numberOfRooms: number;
+  extraBeds: number;
+  cost?: number;
+}
+
 export interface IPackage extends Document {
   bookingId: string;
   guestName: string;
@@ -18,9 +27,18 @@ export interface IPackage extends Document {
   checkOutDate: Date;
   totalDays: string;
   hotelDetails: string;
+  hotelName: string;
+  numberOfRooms: number;
+  extraBeds: number;
+  hotelAllocations: IHotelAllocation[];
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  hotelCost: number;
+  cabVendorCost: number;
+  otherExpenses: number;
+  totalExpense: number;
+  netProfit: number;
   status: 'Upcoming' | 'Ongoing' | 'Completed' | 'Cancelled';
   dailyLogs: IDailyLog[];
   createdAt: Date;
@@ -46,9 +64,27 @@ const PackageSchema = new Schema<IPackage>(
     checkOutDate: { type: Date, required: true, index: true },
     totalDays: { type: String, default: '' },
     hotelDetails: { type: String, default: '' },
+    hotelName: { type: String, trim: true, default: '' },
+    numberOfRooms: { type: Number, default: 1 },
+    extraBeds: { type: Number, default: 0 },
+    hotelAllocations: [
+      {
+        hotelName: { type: String, default: '', trim: true },
+        location: { type: String, default: '' },
+        roomType: { type: String, default: 'Standard' },
+        numberOfRooms: { type: Number, default: 1 },
+        extraBeds: { type: Number, default: 0 },
+        cost: { type: Number, default: 0 },
+      },
+    ],
     packageAmount: { type: Number, default: 0 },
     advancePaid: { type: Number, default: 0 },
     balancePending: { type: Number, default: 0 },
+    hotelCost: { type: Number, default: 0 },
+    cabVendorCost: { type: Number, default: 0 },
+    otherExpenses: { type: Number, default: 0 },
+    totalExpense: { type: Number, default: 0 },
+    netProfit: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ['Upcoming', 'Ongoing', 'Completed', 'Cancelled'],
@@ -62,9 +98,36 @@ const PackageSchema = new Schema<IPackage>(
 PackageSchema.index({ checkInDate: 1, checkOutDate: 1 });
 PackageSchema.index({ status: 1, checkInDate: 1 });
 PackageSchema.index({ guestName: 'text', bookingId: 'text', agencyName: 'text' });
+PackageSchema.index({ hotelName: 1, checkInDate: 1 });
+PackageSchema.index({ 'hotelAllocations.hotelName': 1 });
 
-// Auto-generate unique bookingId before save
+// Auto-calculate financial metrics and generate unique bookingId before save
 PackageSchema.pre('save', async function (next) {
+  // Sync expenses and net profit
+  const hCost = Number(this.hotelCost) || 0;
+  const cCost = Number(this.cabVendorCost) || 0;
+  const oCost = Number(this.otherExpenses) || 0;
+  if (!this.totalExpense || this.totalExpense === 0) {
+    this.totalExpense = hCost + cCost + oCost;
+  }
+  this.netProfit = (Number(this.packageAmount) || 0) - (Number(this.totalExpense) || 0);
+
+  // If primary hotelName not explicitly set, sync from hotelAllocations or hotelDetails
+  if (!this.hotelName && this.hotelAllocations && this.hotelAllocations.length > 0) {
+    this.hotelName = this.hotelAllocations[0].hotelName;
+  } else if (!this.hotelName && this.hotelDetails) {
+    // extract first hotel name if simple
+    const firstWord = this.hotelDetails.split(/[\n,;-]/)[0]?.trim();
+    if (firstWord && firstWord.length < 50) {
+      this.hotelName = firstWord;
+    }
+  }
+
+  // Ensure balance pending calculation
+  const pkgAmt = Number(this.packageAmount) || 0;
+  const advPaid = Number(this.advancePaid) || 0;
+  this.balancePending = Math.max(0, pkgAmt - advPaid);
+
   if (!this.bookingId) {
     const PkgModel = (this.constructor as mongoose.Model<IPackage>);
     const lastPkg = await PkgModel.findOne({ bookingId: /^TRV-\d+$/ })

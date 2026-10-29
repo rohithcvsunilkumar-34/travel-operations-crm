@@ -8,6 +8,8 @@ export interface IVehicleLog extends Document {
   vehicleType: string;
   vehicleNumber: string;
   vendorName: string;
+  numberOfCabs: number;
+  vendorCost: number;
   driverName: string;
   driverPhone: string;
   dutyRoute: string;
@@ -25,6 +27,8 @@ const VehicleLogSchema = new Schema<IVehicleLog>(
     vehicleType: { type: String, default: '' },
     vehicleNumber: { type: String, default: '' },
     vendorName: { type: String, default: '' },
+    numberOfCabs: { type: Number, default: 1 },
+    vendorCost: { type: Number, default: 0 },
     driverName: { type: String, default: '' },
     driverPhone: { type: String, default: '' },
     dutyRoute: { type: String, default: '' },
@@ -36,6 +40,7 @@ const VehicleLogSchema = new Schema<IVehicleLog>(
 VehicleLogSchema.index({ packageId: 1, operationDate: 1 });
 VehicleLogSchema.index({ vehicleNumber: 1, operationDate: 1 });
 VehicleLogSchema.index({ driverName: 1, operationDate: 1 });
+VehicleLogSchema.index({ vendorName: 1, operationDate: 1 });
 
 const VehicleLog =
   mongoose.models.VehicleLog || mongoose.model<IVehicleLog>('VehicleLog', VehicleLogSchema);

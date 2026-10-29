@@ -14,10 +14,21 @@ export interface DailyFleetLogItem {
   vehicleType: string;
   vehicleNumber: string;
   vendorName: string;
+  numberOfCabs?: number;
+  vendorCost?: number;
   driverName: string;
   driverPhone: string;
   paxInVehicle: number;
   remarks: string;
+}
+
+export interface HotelAllocationItem {
+  hotelName: string;
+  location?: string;
+  roomType?: string;
+  numberOfRooms: number;
+  extraBeds: number;
+  cost?: number;
 }
 
 interface PackageFormData {
@@ -29,9 +40,18 @@ interface PackageFormData {
   checkOutDate: string;
   totalDays: string;
   hotelDetails: string;
+  hotelName?: string;
+  numberOfRooms?: number;
+  extraBeds?: number;
+  hotelAllocations?: HotelAllocationItem[];
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  hotelCost?: number;
+  cabVendorCost?: number;
+  otherExpenses?: number;
+  totalExpense?: number;
+  netProfit?: number;
   status: string;
 }
 
@@ -66,9 +86,18 @@ const defaultForm: PackageFormData = {
   checkOutDate: '',
   totalDays: '',
   hotelDetails: '',
+  hotelName: '',
+  numberOfRooms: 1,
+  extraBeds: 0,
+  hotelAllocations: [],
   packageAmount: 0,
   advancePaid: 0,
   balancePending: 0,
+  hotelCost: 0,
+  cabVendorCost: 0,
+  otherExpenses: 0,
+  totalExpense: 0,
+  netProfit: 0,
   status: 'Upcoming',
 };
 
@@ -136,9 +165,18 @@ export default function PackageModal({
         checkOutDate: editData.checkOutDate ? editData.checkOutDate.slice(0, 10) : '',
         totalDays: editData.totalDays || '',
         hotelDetails: editData.hotelDetails || '',
+        hotelName: editData.hotelName || '',
+        numberOfRooms: editData.numberOfRooms !== undefined ? editData.numberOfRooms : 1,
+        extraBeds: editData.extraBeds !== undefined ? editData.extraBeds : 0,
+        hotelAllocations: editData.hotelAllocations || [],
         packageAmount: editData.packageAmount || 0,
         advancePaid: editData.advancePaid || 0,
         balancePending: editData.balancePending || 0,
+        hotelCost: editData.hotelCost || 0,
+        cabVendorCost: editData.cabVendorCost || 0,
+        otherExpenses: editData.otherExpenses || 0,
+        totalExpense: editData.totalExpense || 0,
+        netProfit: editData.netProfit || 0,
         status: editData.status || 'Upcoming',
       });
 
@@ -157,6 +195,8 @@ export default function PackageModal({
                 vehicleType: l.vehicleType || '',
                 vehicleNumber: l.vehicleNumber || '',
                 vendorName: l.vendorName || '',
+                numberOfCabs: Number(l.numberOfCabs) || 1,
+                vendorCost: Number(l.vendorCost) || 0,
                 driverName: l.driverName || '',
                 driverPhone: l.driverPhone || '',
                 paxInVehicle: l.paxInVehicle || data.totalPax || 1,
@@ -185,6 +225,8 @@ export default function PackageModal({
                       vehicleType: '',
                       vehicleNumber: '',
                       vendorName: '',
+                      numberOfCabs: 1,
+                      vendorCost: 0,
                       driverName: '',
                       driverPhone: '',
                       paxInVehicle: editData.totalPax || 1,
@@ -260,10 +302,23 @@ export default function PackageModal({
         }
       }
 
-      if (field === 'packageAmount' || field === 'advancePaid') {
-        const amt = field === 'packageAmount' ? Number(value) : Number(prev.packageAmount);
-        const adv = field === 'advancePaid' ? Number(value) : Number(prev.advancePaid);
-        updated.balancePending = amt - adv;
+      if (
+        field === 'packageAmount' ||
+        field === 'advancePaid' ||
+        field === 'hotelCost' ||
+        field === 'cabVendorCost' ||
+        field === 'otherExpenses' ||
+        field === 'totalExpense'
+      ) {
+        const amt = field === 'packageAmount' ? Number(value) : Number(prev.packageAmount || 0);
+        const adv = field === 'advancePaid' ? Number(value) : Number(prev.advancePaid || 0);
+        const hCost = field === 'hotelCost' ? Number(value) : Number(prev.hotelCost || 0);
+        const cCost = field === 'cabVendorCost' ? Number(value) : Number(prev.cabVendorCost || 0);
+        const oCost = field === 'otherExpenses' ? Number(value) : Number(prev.otherExpenses || 0);
+        const exp = field === 'totalExpense' ? Number(value) : (hCost + cCost + oCost);
+        updated.balancePending = Math.max(0, amt - adv);
+        updated.totalExpense = exp;
+        updated.netProfit = amt - exp;
       }
       return updated;
     });
@@ -292,6 +347,8 @@ export default function PackageModal({
               vehicleType: day1.vehicleType,
               vehicleNumber: day1.vehicleNumber,
               vendorName: day1.vendorName,
+              numberOfCabs: day1.numberOfCabs || 1,
+              vendorCost: day1.vendorCost || 0,
               driverName: day1.driverName,
               driverPhone: day1.driverPhone,
               paxInVehicle: day1.paxInVehicle,
@@ -319,6 +376,8 @@ export default function PackageModal({
         vehicleType: '',
         vehicleNumber: '',
         vendorName: '',
+        numberOfCabs: 1,
+        vendorCost: 0,
         driverName: '',
         driverPhone: '',
         paxInVehicle: form.totalPax || 1,
@@ -574,60 +633,202 @@ export default function PackageModal({
                 </div>
               </div>
 
-              {/* Hotel Details */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Hotel Stay Details / Houseboats / Resorts
-                </label>
-                <textarea
-                  value={form.hotelDetails}
-                  onChange={(e) => handleChange('hotelDetails', e.target.value)}
-                  placeholder="e.g. Day 1-2: Grand Plaza Munnar (Deluxe Room), Day 3: Premium Houseboat Alleppey"
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none bg-white"
-                />
+              {/* Hotel & Room Allocation Section */}
+              <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200/70 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-amber-950 uppercase tracking-wider">
+                      🏨 Hotel Room & Extra Bed Allocation
+                    </label>
+                    <p className="text-[11px] text-amber-800/80 mt-0.5">
+                      Specify the primary assigned hotel, rooms booked, and extra beds for this package.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-200">
+                    {form.numberOfRooms ?? 1} Room(s) • {form.extraBeds ?? 0} Extra Bed(s)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-1">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Assigned Hotel / Resort Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.hotelName || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setForm((prev) => ({
+                          ...prev,
+                          hotelName: val,
+                          hotelDetails: prev.hotelDetails ? prev.hotelDetails : val,
+                        }));
+                      }}
+                      placeholder="e.g. Grand Hyatt Kochi"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Number of Rooms (Default: 1) *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.numberOfRooms ?? 1}
+                      onChange={(e) =>
+                        handleChange('numberOfRooms', Math.max(1, parseInt(e.target.value, 10) || 1))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-bold text-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Extra Beds Taken (Default: 0) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.extraBeds ?? 0}
+                      onChange={(e) =>
+                        handleChange('extraBeds', Math.max(0, parseInt(e.target.value, 10) || 0))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Itinerary Stay Description / Multi-Hotel Breakdown
+                  </label>
+                  <textarea
+                    value={form.hotelDetails}
+                    onChange={(e) => handleChange('hotelDetails', e.target.value)}
+                    placeholder="e.g. Day 1-2: Grand Plaza Munnar (2 Rooms), Day 3: Premium Houseboat Alleppey (1 Extra Bed)"
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none bg-white"
+                  />
+                </div>
               </div>
 
-              {/* Financials */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Package Amount (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.packageAmount}
-                    onChange={(e) => handleChange('packageAmount', Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Advance Paid (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.advancePaid}
-                    onChange={(e) => handleChange('advancePaid', Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-green-700 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Balance Pending (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.balancePending}
-                    readOnly
-                    className={`w-full px-3 py-2 text-sm border border-gray-200 rounded-xl font-bold ${
-                      form.balancePending > 0
-                        ? 'bg-red-50 text-red-700 border-red-200'
-                        : 'bg-green-50 text-green-700 border-green-200'
+              {/* Financials & Operational Cost Overview */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-gray-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                    Package Revenue & Operational Costs
+                  </h4>
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full ${
+                      (Number(form.netProfit) ||
+                        Number(form.packageAmount || 0) -
+                          ((Number(form.hotelCost) || 0) +
+                            (Number(form.cabVendorCost) || 0) +
+                            (Number(form.otherExpenses) || 0))) >= 0
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-red-100 text-red-800 border border-red-200'
                     }`}
-                  />
+                  >
+                    Est. Profit: ₹
+                    {(
+                      Number(form.packageAmount || 0) -
+                      ((Number(form.hotelCost) || 0) +
+                        (Number(form.cabVendorCost) || 0) +
+                        (Number(form.otherExpenses) || 0))
+                    ).toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Package Revenue (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.packageAmount}
+                      onChange={(e) => handleChange('packageAmount', Number(e.target.value))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-bold text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Advance Paid (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.advancePaid}
+                      onChange={(e) => handleChange('advancePaid', Number(e.target.value))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-green-700 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Balance Pending (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={form.balancePending}
+                      readOnly
+                      className={`w-full px-3 py-2 text-sm border border-gray-200 rounded-xl font-bold ${
+                        form.balancePending > 0
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-green-50 text-green-700 border-green-200'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-200">
+                  <div className="text-[11px] font-semibold text-gray-500 mb-2">
+                    Operational Costs / Vendor Expenses (₹):
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                        Hotel Cost (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.hotelCost ?? 0}
+                        onChange={(e) => handleChange('hotelCost', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                        Cab Vendor Cost (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.cabVendorCost ?? 0}
+                        onChange={(e) => handleChange('cabVendorCost', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                        Other / Misc Expenses (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.otherExpenses ?? 0}
+                        onChange={(e) => handleChange('otherExpenses', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -811,8 +1012,8 @@ export default function PackageModal({
                         </div>
                       </div>
 
-                      {/* Row 2: Driver, Vendor & Phone */}
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      {/* Row 2: Driver, Vendor, Cabs & Phone */}
+                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                         <div>
                           <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
                             Driver Name
@@ -828,7 +1029,7 @@ export default function PackageModal({
 
                         <div>
                           <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
-                            Driver Contact Number
+                            Driver Phone
                           </label>
                           <input
                             type="tel"
@@ -841,14 +1042,27 @@ export default function PackageModal({
 
                         <div>
                           <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
-                            Vendor / Owner Name
+                            Vendor / Operator *
                           </label>
                           <input
                             type="text"
                             value={log.vendorName}
                             onChange={(e) => updateFleetField(index, 'vendorName', e.target.value)}
-                            placeholder="Vendor or own fleet"
-                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            placeholder="e.g. Kerala Travels / Own"
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
+                            Cabs Allotted (Qty)
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={log.numberOfCabs ?? 1}
+                            onChange={(e) => updateFleetField(index, 'numberOfCabs', Math.max(1, Number(e.target.value) || 1))}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold text-gray-900"
                           />
                         </div>
 

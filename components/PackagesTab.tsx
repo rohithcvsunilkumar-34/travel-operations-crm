@@ -33,9 +33,17 @@ interface Package {
   checkOutDate: string;
   totalDays: string;
   hotelDetails: string;
+  hotelName?: string;
+  numberOfRooms?: number;
+  extraBeds?: number;
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  hotelCost?: number;
+  cabVendorCost?: number;
+  otherExpenses?: number;
+  totalExpense?: number;
+  netProfit?: number;
   status: string;
   dailyLogs: DailyLog[];
 }

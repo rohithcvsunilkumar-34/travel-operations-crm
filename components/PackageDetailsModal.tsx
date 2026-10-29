@@ -27,9 +27,17 @@ export interface PackageDetailData {
   checkOutDate: string;
   totalDays: string;
   hotelDetails: string;
+  hotelName?: string;
+  numberOfRooms?: number;
+  extraBeds?: number;
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  hotelCost?: number;
+  cabVendorCost?: number;
+  otherExpenses?: number;
+  totalExpense?: number;
+  netProfit?: number;
   status: 'Upcoming' | 'Ongoing' | 'Completed' | 'Cancelled' | string;
   dailyLogs?: DailyLog[];
   createdAt?: string;
@@ -341,13 +349,31 @@ export default function PackageDetailsModal({
           </div>
 
           {/* Hotel & Stay Information */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-2">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Hotel size={14} className="text-amber-500" />
-              Hotel & Stay Details
-            </h3>
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Hotel size={14} className="text-amber-500" />
+                Hotel & Room Allocation
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-lg">
+                  🛏️ {pkg.numberOfRooms ?? 1} Room{(pkg.numberOfRooms ?? 1) > 1 ? 's' : ''}
+                </span>
+                <span className="text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-lg">
+                  ➕ {pkg.extraBeds ?? 0} Extra Bed{(pkg.extraBeds ?? 0) !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            {pkg.hotelName && (
+              <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <span className="text-amber-600 font-semibold text-xs uppercase tracking-wide">Assigned Hotel:</span>
+                <span>{pkg.hotelName}</span>
+              </div>
+            )}
+
             <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed bg-gray-50 p-3.5 rounded-xl border border-gray-100">
-              {pkg.hotelDetails || 'No hotel details specified for this package.'}
+              {pkg.hotelDetails || 'No additional hotel notes specified for this package.'}
             </p>
           </div>
 

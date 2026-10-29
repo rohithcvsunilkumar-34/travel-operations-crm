@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, Truck, ClipboardList, Trash2, X, LogOut, User, Shield } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, ClipboardList, Trash2, X, LogOut, User, Shield, Hotel, Car } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -13,6 +13,8 @@ const navItems = [
   { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard },
   { id: 'packages', label: 'Packages & Guests', icon: Package },
   { id: 'fleet', label: 'Fleet Tracker', icon: Truck },
+  { id: 'hotels', label: 'Hotels & Rooms', icon: Hotel },
+  { id: 'vendors', label: 'Cab Vendors', icon: Car },
   { id: 'cleanup', label: 'Data Cleanup', icon: Trash2 },
 ];
 
