@@ -16,8 +16,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const sort = searchParams.get('sort') || 'asc';
     const status = searchParams.get('status');
-    const mode = searchParams.get('mode'); // 'overlap' or 'checkin' (default)
+    const mode = searchParams.get('mode'); // 'overlap' or 'checkin' / 'checkout' (default checkout)
     const date = searchParams.get('date'); // specific date for daily operations
+    const dateField = searchParams.get('dateField') === 'checkInDate' ? 'checkInDate' : 'checkOutDate';
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: any = {};
@@ -44,14 +45,14 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Anchored strictly to check-in date (Rule 1)
+      // Anchored strictly to checkOutDate (Trip Completion Month)
       if (fromDate || toDate) {
-        query.checkInDate = {};
-        if (fromDate) query.checkInDate.$gte = new Date(fromDate);
+        query[dateField] = {};
+        if (fromDate) query[dateField].$gte = new Date(fromDate);
         if (toDate) {
           const end = new Date(toDate);
           end.setHours(23, 59, 59, 999);
-          query.checkInDate.$lte = end;
+          query[dateField].$lte = end;
         }
       }
     }

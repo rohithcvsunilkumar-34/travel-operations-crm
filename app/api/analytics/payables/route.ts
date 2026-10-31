@@ -25,10 +25,10 @@ export async function GET(request: NextRequest) {
         const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
         const end = new Date(y, m, 0, 23, 59, 59, 999);
 
-        // Rule 1: Anchored strictly to checkInDate month
-        pkgQuery.checkInDate = { $gte: start, $lte: end };
+        // Anchored strictly to checkOutDate month (Trip completion & final bill settlement)
+        pkgQuery.checkOutDate = { $gte: start, $lte: end };
 
-        // Fetch package booking IDs for this check-in month
+        // Fetch package booking IDs for this check-out month
         const monthPkgs = await Package.find(pkgQuery).select('bookingId').lean();
         const monthBookingIds = monthPkgs.map((p: any) => p.bookingId).filter(Boolean);
 

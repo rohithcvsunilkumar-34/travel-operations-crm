@@ -22,12 +22,12 @@ export async function GET(request: NextRequest) {
     const mYear = parseInt(yStr, 10) || currentYear;
     const mNum = parseInt(mStr, 10) || (now.getMonth() + 1);
 
-    // 1. Single Month Calculation (Rule 1: Anchored strictly to Check-In Month)
+    // 1. Single Month Calculation (Anchored strictly to Check-Out Month / Trip Completion)
     const startOfSingleMonth = new Date(mYear, mNum - 1, 1, 0, 0, 0, 0);
     const endOfSingleMonth = new Date(mYear, mNum, 0, 23, 59, 59, 999);
 
     const singleMonthPackages = await Package.find({
-      checkInDate: { $gte: startOfSingleMonth, $lte: endOfSingleMonth },
+      checkOutDate: { $gte: startOfSingleMonth, $lte: endOfSingleMonth },
       status: { $ne: 'Cancelled' },
     }).lean();
 
@@ -152,9 +152,9 @@ export async function GET(request: NextRequest) {
     const startOfYear = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
     const endOfYear = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
 
-    // Rule 1: Attributed entirely to its Check-In Month
+    // Attributed entirely to its Check-Out Month (Trip Completion)
     const yearPackages = await Package.find({
-      checkInDate: { $gte: startOfYear, $lte: endOfYear },
+      checkOutDate: { $gte: startOfYear, $lte: endOfYear },
       status: { $ne: 'Cancelled' },
     }).lean();
 
@@ -163,10 +163,10 @@ export async function GET(request: NextRequest) {
       const mEnd = new Date(selectedYear, m + 1, 0, 23, 59, 59, 999);
       const key = `${selectedYear}-${String(m + 1).padStart(2, '0')}`;
 
-      // Filter packages strictly where checkInDate falls in this month
+      // Filter packages strictly where checkOutDate falls in this month
       const activePkgs = yearPackages.filter((raw: any) => {
-        const inD = new Date(raw.checkInDate);
-        return inD >= mStart && inD <= mEnd;
+        const outD = new Date(raw.checkOutDate);
+        return outD >= mStart && outD <= mEnd;
       });
 
       let mIncome = 0;
