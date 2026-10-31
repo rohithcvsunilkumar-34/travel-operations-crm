@@ -13,6 +13,7 @@ interface VehicleFormData {
   vehicleNumber: string;
   vendorName: string;
   numberOfCabs?: number;
+  daily_cab_cost?: number;
   vendorCost?: number;
   driverName: string;
   driverPhone: string;
@@ -60,6 +61,7 @@ const defaultForm: VehicleFormData = {
   vehicleNumber: '',
   vendorName: '',
   numberOfCabs: 1,
+  daily_cab_cost: 0,
   vendorCost: 0,
   driverName: '',
   driverPhone: '',
@@ -368,7 +370,7 @@ export default function VehicleModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 Vendor / Transporter Name
@@ -391,6 +393,23 @@ export default function VehicleModal({
                 value={form.numberOfCabs ?? 1}
                 onChange={(e) => handleChange('numberOfCabs', Math.max(1, Number(e.target.value) || 1))}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-bold text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Daily Cab Cost (₹) *
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.daily_cab_cost ?? form.vendorCost ?? 0}
+                onChange={(e) => {
+                  const val = Number(e.target.value) || 0;
+                  handleChange('daily_cab_cost', val);
+                  handleChange('vendorCost', val);
+                }}
+                placeholder="Payable cost in ₹"
+                className="w-full px-3 py-2 text-sm border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 font-bold text-emerald-800 bg-emerald-50/30"
               />
             </div>
             <div>

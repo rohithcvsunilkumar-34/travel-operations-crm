@@ -4,6 +4,7 @@ import connectDB from '@/lib/mongodb';
 import Package from '@/models/Package';
 import VehicleLog from '@/models/VehicleLog';
 import { syncToCloud } from '@/lib/cloudSync';
+import { syncPackageFinancials } from '@/lib/packageFinancials';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,17 +43,42 @@ export async function PUT(
     const body = await request.json();
     const { fleetLogs, deletedFleetIds, ...packageData } = body;
 
+    const existingPkg = await Package.findById(params.id).lean();
+    if (!existingPkg) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const existing = existingPkg as any;
+
     // Auto-calc balance and profit
     const packageAmount = Number(packageData.packageAmount) || 0;
     const advancePaid = Number(packageData.advancePaid) || 0;
     packageData.balancePending = Math.max(0, packageAmount - advancePaid);
 
-    const hotelCost = Number(packageData.hotelCost) || 0;
-    const cabVendorCost = Number(packageData.cabVendorCost) || 0;
-    const otherExpenses = Number(packageData.otherExpenses) || 0;
-    if (!packageData.totalExpense) {
-      packageData.totalExpense = hotelCost + cabVendorCost + otherExpenses;
+    const hotelCost = Number(packageData.total_hotel_cost) || Number(packageData.hotelCost) || Number(existing.total_hotel_cost) || 0;
+    packageData.hotelCost = hotelCost;
+    packageData.total_hotel_cost = hotelCost;
+
+    // If daily fleet logs are being passed, calculate cab cost from fleet
+    let fleetCostSum = 0;
+    if (Array.isArray(fleetLogs) && fleetLogs.length > 0) {
+      fleetCostSum = fleetLogs.reduce(
+        (acc: number, l: any) => acc + (Number(l.daily_cab_cost) || Number(l.vendorCost) || 0),
+        0
+      );
     }
+    const cabVendorCost = fleetCostSum > 0 ? fleetCostSum : (Number(packageData.total_cab_cost) || Number(packageData.cabVendorCost) || Number(existing.total_cab_cost) || 0);
+    packageData.cabVendorCost = cabVendorCost;
+    packageData.total_cab_cost = cabVendorCost;
+
+    // Retain existing food cost if not explicitly passed
+    let totalFoodCost = Number(packageData.total_food_cost);
+    if (isNaN(totalFoodCost) || totalFoodCost === 0) {
+      totalFoodCost = Number(existing.total_food_cost) || 0;
+    }
+    packageData.total_food_cost = totalFoodCost;
+
+    const otherExpenses = Number(packageData.otherExpenses) || 0;
+    packageData.otherExpenses = otherExpenses;
+
+    packageData.totalExpense = hotelCost + cabVendorCost + totalFoodCost + otherExpenses;
     packageData.netProfit = packageAmount - packageData.totalExpense;
 
     const pkg = await Package.findByIdAndUpdate(params.id, packageData, {
@@ -60,7 +86,6 @@ export async function PUT(
       runValidators: true,
     }).lean();
 
-    if (!pkg) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const packageObj = pkg as any;
 
     // Handle deleted fleet logs if any
@@ -82,6 +107,7 @@ export async function PUT(
         const end = new Date(opDate);
         end.setHours(23, 59, 59, 999);
 
+        const dailyCabCost = Number(flog.daily_cab_cost) || Number(flog.vendorCost) || 0;
         const updateDoc = {
           operationDate: opDate,
           packageId: packageObj.bookingId,
@@ -91,7 +117,8 @@ export async function PUT(
           vehicleNumber: flog.vehicleNumber || '',
           vendorName: flog.vendorName || '',
           numberOfCabs: Number(flog.numberOfCabs) || 1,
-          vendorCost: Number(flog.vendorCost) || 0,
+          daily_cab_cost: dailyCabCost,
+          vendorCost: dailyCabCost,
           driverName: flog.driverName || '',
           driverPhone: flog.driverPhone || '',
           dutyRoute: flog.dutyRoute || '',
@@ -119,11 +146,15 @@ export async function PUT(
       }
     }
 
+    // Full synchronization check
+    const syncedPkg = await syncPackageFinancials(params.id);
+    const finalPackageObj = syncedPkg ? syncedPkg.toObject() : packageObj;
+
     // Mirror package update to cloud
-    syncToCloud('packages', 'update', { _id: params.id, ...packageData });
+    syncToCloud('packages', 'update', { _id: params.id, ...finalPackageObj });
 
     return NextResponse.json({
-      ...JSON.parse(JSON.stringify(packageObj)),
+      ...JSON.parse(JSON.stringify(finalPackageObj)),
       fleetLogs: JSON.parse(JSON.stringify(savedFleetLogs)),
     });
   } catch (error) {

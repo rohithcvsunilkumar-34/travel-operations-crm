@@ -15,6 +15,7 @@ export interface DailyFleetLogItem {
   vehicleNumber: string;
   vendorName: string;
   numberOfCabs?: number;
+  daily_cab_cost?: number;
   vendorCost?: number;
   driverName: string;
   driverPhone: string;
@@ -43,6 +44,9 @@ interface PackageFormData {
   hotelName?: string;
   numberOfRooms?: number;
   extraBeds?: number;
+  total_hotel_cost?: number;
+  total_cab_cost?: number;
+  total_food_cost?: number;
   hotelAllocations?: HotelAllocationItem[];
   packageAmount: number;
   advancePaid: number;
@@ -89,6 +93,9 @@ const defaultForm: PackageFormData = {
   hotelName: '',
   numberOfRooms: 1,
   extraBeds: 0,
+  total_hotel_cost: 0,
+  total_cab_cost: 0,
+  total_food_cost: 0,
   hotelAllocations: [],
   packageAmount: 0,
   advancePaid: 0,
@@ -172,8 +179,11 @@ export default function PackageModal({
         packageAmount: editData.packageAmount || 0,
         advancePaid: editData.advancePaid || 0,
         balancePending: editData.balancePending || 0,
-        hotelCost: editData.hotelCost || 0,
-        cabVendorCost: editData.cabVendorCost || 0,
+        hotelCost: editData.total_hotel_cost ?? editData.hotelCost ?? 0,
+        total_hotel_cost: editData.total_hotel_cost ?? editData.hotelCost ?? 0,
+        cabVendorCost: editData.total_cab_cost ?? editData.cabVendorCost ?? 0,
+        total_cab_cost: editData.total_cab_cost ?? editData.cabVendorCost ?? 0,
+        total_food_cost: editData.total_food_cost || 0,
         otherExpenses: editData.otherExpenses || 0,
         totalExpense: editData.totalExpense || 0,
         netProfit: editData.netProfit || 0,
@@ -196,7 +206,8 @@ export default function PackageModal({
                 vehicleNumber: l.vehicleNumber || '',
                 vendorName: l.vendorName || '',
                 numberOfCabs: Number(l.numberOfCabs) || 1,
-                vendorCost: Number(l.vendorCost) || 0,
+                daily_cab_cost: Number(l.daily_cab_cost) || Number(l.vendorCost) || 0,
+                vendorCost: Number(l.daily_cab_cost) || Number(l.vendorCost) || 0,
                 driverName: l.driverName || '',
                 driverPhone: l.driverPhone || '',
                 paxInVehicle: l.paxInVehicle || data.totalPax || 1,
@@ -649,10 +660,10 @@ export default function PackageModal({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div className="sm:col-span-1">
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Assigned Hotel / Resort Name *
+                      Assigned Hotel / Resort *
                     </label>
                     <input
                       type="text"
@@ -672,7 +683,7 @@ export default function PackageModal({
 
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Number of Rooms (Default: 1) *
+                      Rooms (Default: 1) *
                     </label>
                     <input
                       type="number"
@@ -687,7 +698,7 @@ export default function PackageModal({
 
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Extra Beds Taken (Default: 0) *
+                      Extra Beds (Default: 0) *
                     </label>
                     <input
                       type="number"
@@ -697,6 +708,27 @@ export default function PackageModal({
                         handleChange('extraBeds', Math.max(0, parseInt(e.target.value, 10) || 0))
                       }
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-bold text-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Total Hotel Cost (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.total_hotel_cost ?? form.hotelCost ?? 0}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        setForm((prev) => ({
+                          ...prev,
+                          total_hotel_cost: val,
+                          hotelCost: val,
+                        }));
+                      }}
+                      placeholder="e.g. 15000"
+                      className="w-full px-3 py-2 text-sm border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-emerald-50/20 font-bold text-emerald-900"
                     />
                   </div>
                 </div>
@@ -1012,8 +1044,8 @@ export default function PackageModal({
                         </div>
                       </div>
 
-                      {/* Row 2: Driver, Vendor, Cabs & Phone */}
-                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                      {/* Row 2: Driver, Vendor, Cabs, Cost & Pax */}
+                      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
                         <div>
                           <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
                             Driver Name
@@ -1063,6 +1095,24 @@ export default function PackageModal({
                             value={log.numberOfCabs ?? 1}
                             onChange={(e) => updateFleetField(index, 'numberOfCabs', Math.max(1, Number(e.target.value) || 1))}
                             className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold text-gray-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">
+                            Daily Cab Cost (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={log.daily_cab_cost ?? log.vendorCost ?? 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              updateFleetField(index, 'daily_cab_cost', val);
+                              updateFleetField(index, 'vendorCost', val);
+                            }}
+                            placeholder="Cost in ₹"
+                            className="w-full px-2.5 py-1.5 text-xs border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono font-bold text-emerald-800 bg-emerald-50/30"
                           />
                         </div>
 

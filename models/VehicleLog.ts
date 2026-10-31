@@ -10,6 +10,7 @@ export interface IVehicleLog extends Document {
   vendorName: string;
   numberOfCabs: number;
   vendorCost: number;
+  daily_cab_cost: number;
   driverName: string;
   driverPhone: string;
   dutyRoute: string;
@@ -29,6 +30,7 @@ const VehicleLogSchema = new Schema<IVehicleLog>(
     vendorName: { type: String, default: '' },
     numberOfCabs: { type: Number, default: 1 },
     vendorCost: { type: Number, default: 0 },
+    daily_cab_cost: { type: Number, default: 0 },
     driverName: { type: String, default: '' },
     driverPhone: { type: String, default: '' },
     dutyRoute: { type: String, default: '' },
@@ -36,6 +38,13 @@ const VehicleLogSchema = new Schema<IVehicleLog>(
   },
   { timestamps: true }
 );
+
+VehicleLogSchema.pre('save', function (next) {
+  const cost = Number(this.daily_cab_cost) || Number(this.vendorCost) || 0;
+  this.daily_cab_cost = cost;
+  this.vendorCost = cost;
+  next();
+});
 
 VehicleLogSchema.index({ packageId: 1, operationDate: 1 });
 VehicleLogSchema.index({ vehicleNumber: 1, operationDate: 1 });

@@ -95,3 +95,51 @@ export function formatDisplayCurrency(amount?: number): string {
   }).format(amount);
 }
 
+export interface CrossMonthInfo {
+  isCrossMonth: boolean;
+  label: string;
+  fromMonth: string;
+  toMonth: string;
+  shortLabel: string;
+}
+
+const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Checks whether a booking spans across different calendar months (or years).
+ * Returns cross-month metadata and visual badge labels.
+ */
+export function getCrossMonthInfo(
+  checkIn?: string | Date | null,
+  checkOut?: string | Date | null
+): CrossMonthInfo {
+  if (!checkIn || !checkOut) {
+    return { isCrossMonth: false, label: '', fromMonth: '', toMonth: '', shortLabel: '' };
+  }
+  const inD = new Date(checkIn);
+  const outD = new Date(checkOut);
+  if (isNaN(inD.getTime()) || isNaN(outD.getTime())) {
+    return { isCrossMonth: false, label: '', fromMonth: '', toMonth: '', shortLabel: '' };
+  }
+
+  const inM = inD.getMonth();
+  const outM = outD.getMonth();
+  const inY = inD.getFullYear();
+  const outY = outD.getFullYear();
+
+  if (inY !== outY || inM !== outM) {
+    const fromMonth = SHORT_MONTH_NAMES[inM];
+    const toMonth = SHORT_MONTH_NAMES[outM];
+    return {
+      isCrossMonth: true,
+      label: `Spans ${fromMonth} - ${toMonth}`,
+      fromMonth,
+      toMonth,
+      shortLabel: `${fromMonth} ➔ ${toMonth}`,
+    };
+  }
+
+  return { isCrossMonth: false, label: '', fromMonth: '', toMonth: '', shortLabel: '' };
+}
+
+

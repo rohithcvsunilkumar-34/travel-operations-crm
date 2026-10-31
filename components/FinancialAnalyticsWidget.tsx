@@ -31,6 +31,7 @@ interface FinancialData {
     balancePending: number;
     hotelExpense: number;
     cabExpense: number;
+    foodExpense?: number;
     otherExpense: number;
     totalExpense: number;
     netProfit: number;
@@ -287,7 +288,7 @@ export default function FinancialAnalyticsWidget() {
             </div>
             <div className="text-[11px] text-amber-700/80 mt-1">
               {viewMode === 'single'
-                ? `Hotels: ₹${data.singleMonth.hotelExpense.toLocaleString('en-IN')} • Cabs: ₹${data.singleMonth.cabExpense.toLocaleString('en-IN')}`
+                ? `Hotels: ₹${data.singleMonth.hotelExpense.toLocaleString('en-IN')} • Cabs: ₹${data.singleMonth.cabExpense.toLocaleString('en-IN')}${data.singleMonth.foodExpense ? ` • Food: ₹${data.singleMonth.foodExpense.toLocaleString('en-IN')}` : ''}`
                 : `Total Vendor & Operating Outflows`}
             </div>
           </div>

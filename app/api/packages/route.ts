@@ -16,17 +16,43 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const sort = searchParams.get('sort') || 'asc';
     const status = searchParams.get('status');
+    const mode = searchParams.get('mode'); // 'overlap' or 'checkin' (default)
+    const date = searchParams.get('date'); // specific date for daily operations
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: any = {};
 
-    if (fromDate || toDate) {
-      query.checkInDate = {};
-      if (fromDate) query.checkInDate.$gte = new Date(fromDate);
-      if (toDate) {
-        const end = new Date(toDate);
-        end.setHours(23, 59, 59, 999);
-        query.checkInDate.$lte = end;
+    if (mode === 'overlap') {
+      // Overlapping query for operational views (Rule 2)
+      if (date) {
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+        query.checkInDate = { $lte: dayEnd };
+        query.checkOutDate = { $gte: dayStart };
+      } else if (fromDate || toDate) {
+        if (toDate) {
+          const end = new Date(toDate);
+          end.setHours(23, 59, 59, 999);
+          query.checkInDate = { $lte: end };
+        }
+        if (fromDate) {
+          const start = new Date(fromDate);
+          start.setHours(0, 0, 0, 0);
+          query.checkOutDate = { $gte: start };
+        }
+      }
+    } else {
+      // Anchored strictly to check-in date (Rule 1)
+      if (fromDate || toDate) {
+        query.checkInDate = {};
+        if (fromDate) query.checkInDate.$gte = new Date(fromDate);
+        if (toDate) {
+          const end = new Date(toDate);
+          end.setHours(23, 59, 59, 999);
+          query.checkInDate.$lte = end;
+        }
       }
     }
     if (agency && agency !== 'all') {
@@ -92,12 +118,19 @@ export async function POST(request: NextRequest) {
     const advancePaid = Number(packageData.advancePaid) || 0;
     packageData.balancePending = Math.max(0, packageAmount - advancePaid);
 
-    const hotelCost = Number(packageData.hotelCost) || 0;
-    const cabVendorCost = Number(packageData.cabVendorCost) || 0;
-    const otherExpenses = Number(packageData.otherExpenses) || 0;
-    if (!packageData.totalExpense) {
-      packageData.totalExpense = hotelCost + cabVendorCost + otherExpenses;
-    }
+    const hotelCost = Number(packageData.total_hotel_cost) || Number(packageData.hotelCost) || 0;
+    packageData.hotelCost = hotelCost;
+    packageData.total_hotel_cost = hotelCost;
+
+    const cabVendorCost = Number(packageData.total_cab_cost) || Number(packageData.cabVendorCost) || 0;
+    packageData.cabVendorCost = cabVendorCost;
+    packageData.total_cab_cost = cabVendorCost;
+
+    const otherExpenses = Number(packageData.total_food_cost) || Number(packageData.otherExpenses) || 0;
+    packageData.otherExpenses = otherExpenses;
+    packageData.total_food_cost = otherExpenses;
+
+    packageData.totalExpense = hotelCost + cabVendorCost + otherExpenses;
     packageData.netProfit = packageAmount - packageData.totalExpense;
 
     const pkg = new Package(packageData);
@@ -108,6 +141,7 @@ export async function POST(request: NextRequest) {
       for (const flog of fleetLogs) {
         if (!flog.operationDate) continue;
         const opDate = new Date(flog.operationDate);
+        const dailyCabCost = Number(flog.daily_cab_cost) || Number(flog.vendorCost) || 0;
         const vLog = new VehicleLog({
           operationDate: opDate,
           packageId: pkg.bookingId,
@@ -117,7 +151,8 @@ export async function POST(request: NextRequest) {
           vehicleNumber: flog.vehicleNumber || '',
           vendorName: flog.vendorName || '',
           numberOfCabs: Number(flog.numberOfCabs) || 1,
-          vendorCost: Number(flog.vendorCost) || 0,
+          daily_cab_cost: dailyCabCost,
+          vendorCost: dailyCabCost,
           driverName: flog.driverName || '',
           driverPhone: flog.driverPhone || '',
           dutyRoute: flog.dutyRoute || '',

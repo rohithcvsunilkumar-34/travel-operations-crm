@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import VehicleLog from '@/models/VehicleLog';
 import { syncToCloud } from '@/lib/cloudSync';
+import { syncPackageFinancials } from '@/lib/packageFinancials';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +71,11 @@ export async function POST(request: NextRequest) {
 
     // Mirror to cloud
     syncToCloud('vehiclelogs', 'insert', log.toObject());
+
+    // Auto-sync package cab cost & operational totals
+    if (log.packageId) {
+      await syncPackageFinancials(log.packageId);
+    }
 
     return NextResponse.json(JSON.parse(JSON.stringify(log)), { status: 201 });
   } catch (error) {

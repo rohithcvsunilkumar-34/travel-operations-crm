@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ToastMessage } from './Toast';
+import { getCrossMonthInfo } from '@/lib/formatters';
 
 interface BookingItem {
   packageId: string;
@@ -414,8 +415,20 @@ export default function HotelsTab({ addToast, onViewPackage }: HotelsTabProps) {
                                     <div className="font-bold text-gray-900 text-sm">
                                       {b.guestName}
                                     </div>
-                                    <div className="text-gray-500 text-[11px]">
-                                      {b.checkInDate} → {b.checkOutDate} ({b.totalPax} Guests)
+                                    <div className="text-gray-500 text-[11px] flex items-center gap-1.5 flex-wrap">
+                                      <span>{b.checkInDate} → {b.checkOutDate} ({b.totalPax} Guests)</span>
+                                      {(() => {
+                                        const cm = getCrossMonthInfo(b.checkInDate, b.checkOutDate);
+                                        return cm.isCrossMonth ? (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs whitespace-nowrap"
+                                            title="Cross-month hotel stay"
+                                          >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                            {cm.label}
+                                          </span>
+                                        ) : null;
+                                      })()}
                                     </div>
                                   </div>
                                 ))}
@@ -435,3 +448,4 @@ export default function HotelsTab({ addToast, onViewPackage }: HotelsTabProps) {
     </div>
   );
 }
+

@@ -9,7 +9,7 @@ import PackageModal from './PackageModal';
 import DailyLogModal from './DailyLogModal';
 import PackageDetailsModal from './PackageDetailsModal';
 import RecordPaymentModal from './RecordPaymentModal';
-import { formatName, getInitials, getStatusConfig } from '@/lib/formatters';
+import { formatName, getInitials, getStatusConfig, getCrossMonthInfo } from '@/lib/formatters';
 import * as XLSX from 'xlsx';
 import { exportPackagesReportPDF, exportSinglePackagePDF } from '@/lib/pdfExport';
 import { getGuestWhatsAppLink } from '@/lib/whatsapp';
@@ -39,6 +39,9 @@ interface Package {
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  total_hotel_cost?: number;
+  total_cab_cost?: number;
+  total_food_cost?: number;
   hotelCost?: number;
   cabVendorCost?: number;
   otherExpenses?: number;
@@ -548,7 +551,23 @@ export default function PackagesTab({ addToast }: PackagesTabProps) {
                       </td>
                       <td className="px-4 py-3 text-gray-600 text-xs font-medium">{pkg.agencyName || 'Direct'}</td>
                       <td className="px-4 py-3 text-gray-700 font-medium text-xs">{formatDate(pkg.checkInDate)}</td>
-                      <td className="px-4 py-3 text-gray-700 text-xs">{formatDate(pkg.checkOutDate)}</td>
+                      <td className="px-4 py-3 text-gray-700 text-xs">
+                        <div className="flex flex-col gap-1 items-start">
+                          <span>{formatDate(pkg.checkOutDate)}</span>
+                          {(() => {
+                            const cm = getCrossMonthInfo(pkg.checkInDate, pkg.checkOutDate);
+                            return cm.isCrossMonth ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/90 whitespace-nowrap shadow-2xs"
+                                title={`Cross-month stay: Check-in on ${formatDate(pkg.checkInDate)}, Check-out on ${formatDate(pkg.checkOutDate)}`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                {cm.label}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-semibold text-xs">{pkg.totalPax}</span>
                       </td>

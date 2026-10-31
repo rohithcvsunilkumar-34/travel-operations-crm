@@ -12,6 +12,8 @@ import FleetTab from './FleetTab';
 import HotelsTab from './HotelsTab';
 import CabVendorsTab from './CabVendorsTab';
 import CleanupTab from './CleanupTab';
+import FoodTab from './FoodTab';
+import VendorPayablesWidget from './VendorPayablesWidget';
 import FinancialAnalyticsWidget from './FinancialAnalyticsWidget';
 import Toast, { ToastMessage } from './Toast';
 import CustomReportModal from './CustomReportModal';
@@ -590,6 +592,16 @@ export default function Dashboard() {
           {/* Cab Vendors Tab */}
           {activeTab === 'vendors' && (
             <CabVendorsTab addToast={addToast} />
+          )}
+
+          {/* Food & Dining Tab */}
+          {activeTab === 'food' && (
+            <FoodTab addToast={addToast} onViewPackage={handleOpenNotificationPackage} />
+          )}
+
+          {/* Vendor Payables Tab */}
+          {activeTab === 'payables' && (
+            <VendorPayablesWidget addToast={addToast} onViewPackage={handleOpenNotificationPackage} />
           )}
 
           {/* Cleanup Tab */}

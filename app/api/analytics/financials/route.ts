@@ -22,23 +22,23 @@ export async function GET(request: NextRequest) {
     const mYear = parseInt(yStr, 10) || currentYear;
     const mNum = parseInt(mStr, 10) || (now.getMonth() + 1);
 
-    // 1. Single Month Calculation
+    // 1. Single Month Calculation (Rule 1: Anchored strictly to Check-In Month)
     const startOfSingleMonth = new Date(mYear, mNum - 1, 1, 0, 0, 0, 0);
     const endOfSingleMonth = new Date(mYear, mNum, 0, 23, 59, 59, 999);
 
     const singleMonthPackages = await Package.find({
-      checkInDate: { $lte: endOfSingleMonth },
-      checkOutDate: { $gte: startOfSingleMonth },
+      checkInDate: { $gte: startOfSingleMonth, $lte: endOfSingleMonth },
       status: { $ne: 'Cancelled' },
     }).lean();
 
-    // Also look up vehicle vendor costs for this single month
-    const singleMonthFleet = await VehicleLog.find({
+    // Standalone vehicle vendor costs for this single month (not linked to any package)
+    const unlinkedFleetLogs = await VehicleLog.find({
       operationDate: { $gte: startOfSingleMonth, $lte: endOfSingleMonth },
+      $or: [{ packageId: { $exists: false } }, { packageId: '' }, { packageId: null }],
     }).lean();
 
-    const fleetCostFromLogs = singleMonthFleet.reduce(
-      (sum: number, log: any) => sum + (Number(log.vendorCost) || 0),
+    const unlinkedFleetCost = unlinkedFleetLogs.reduce(
+      (sum: number, log: any) => sum + (Number(log.vendorCost) || Number(log.daily_cab_cost) || 0),
       0
     );
 
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
     let totalBalance = 0;
     let hotelExpense = 0;
     let cabExpense = 0;
+    let foodExpense = 0;
     let otherExpense = 0;
     let totalExpense = 0;
 
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       totalAdvance += adv;
       totalBalance += bal;
 
-      let hCost = Number(p.hotelCost) || 0;
+      let hCost = Number(p.total_hotel_cost) || Number(p.hotelCost) || 0;
       // If hotel allocations have costs, add them if hCost is 0
       if (hCost === 0 && Array.isArray(p.hotelAllocations)) {
         hCost = p.hotelAllocations.reduce(
@@ -69,20 +70,24 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const cCost = Number(p.cabVendorCost) || 0;
+      const cCost = Number(p.total_cab_cost) || Number(p.cabVendorCost) || 0;
+      const fCost = Number(p.total_food_cost) || 0;
       const oCost = Number(p.otherExpenses) || 0;
-      let pkgExp = Number(p.totalExpense) || (hCost + cCost + oCost);
+      let pkgExp = Number(p.totalExpense) || (hCost + cCost + fCost + oCost);
 
       // If package has 0 expense recorded, estimate standard 65% operational baseline
       if (pkgExp === 0 && amt > 0) {
         hCost = Math.round(amt * 0.35);
-        const estCab = Math.round(amt * 0.25);
-        const estMisc = Math.round(amt * 0.05);
-        pkgExp = hCost + estCab + estMisc;
+        const estCab = Math.round(amt * 0.20);
+        const estFood = Math.round(amt * 0.08);
+        const estMisc = Math.round(amt * 0.02);
+        pkgExp = hCost + estCab + estFood + estMisc;
         cabExpense += estCab;
+        foodExpense += estFood;
         otherExpense += estMisc;
       } else {
         cabExpense += cCost;
+        foodExpense += fCost;
         otherExpense += oCost;
       }
 
@@ -90,10 +95,10 @@ export async function GET(request: NextRequest) {
       totalExpense += pkgExp;
     }
 
-    // If vehicle logs recorded vendor costs greater than package recorded cab expenses, use log sum
-    if (fleetCostFromLogs > cabExpense) {
-      totalExpense += fleetCostFromLogs - cabExpense;
-      cabExpense = fleetCostFromLogs;
+    // Add unlinked general fleet costs if any exist
+    if (unlinkedFleetCost > 0) {
+      cabExpense += unlinkedFleetCost;
+      totalExpense += unlinkedFleetCost;
     }
 
     const netProfit = totalIncome - totalExpense;
@@ -112,6 +117,12 @@ export async function GET(request: NextRequest) {
         amount: cabExpense,
         percentage: totalIncome > 0 ? Math.round((cabExpense / totalIncome) * 100) : 0,
         color: '#F59E0B', // Amber
+      },
+      {
+        name: 'Food & Dining Expenses',
+        amount: foodExpense,
+        percentage: totalIncome > 0 ? Math.round((foodExpense / totalIncome) * 100) : 0,
+        color: '#FB923C', // Orange
       },
       {
         name: 'Other Operating Costs',
@@ -141,9 +152,9 @@ export async function GET(request: NextRequest) {
     const startOfYear = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
     const endOfYear = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
 
+    // Rule 1: Attributed entirely to its Check-In Month
     const yearPackages = await Package.find({
-      checkInDate: { $lte: endOfYear },
-      checkOutDate: { $gte: startOfYear },
+      checkInDate: { $gte: startOfYear, $lte: endOfYear },
       status: { $ne: 'Cancelled' },
     }).lean();
 
@@ -152,10 +163,10 @@ export async function GET(request: NextRequest) {
       const mEnd = new Date(selectedYear, m + 1, 0, 23, 59, 59, 999);
       const key = `${selectedYear}-${String(m + 1).padStart(2, '0')}`;
 
+      // Filter packages strictly where checkInDate falls in this month
       const activePkgs = yearPackages.filter((raw: any) => {
         const inD = new Date(raw.checkInDate);
-        const outD = new Date(raw.checkOutDate);
-        return inD <= mEnd && outD >= mStart;
+        return inD >= mStart && inD <= mEnd;
       });
 
       let mIncome = 0;
@@ -164,7 +175,12 @@ export async function GET(request: NextRequest) {
       for (const p of activePkgs) {
         const pObj = p as any;
         const amt = Number(pObj.packageAmount) || 0;
-        let exp = Number(pObj.totalExpense) || (Number(pObj.hotelCost) || 0) + (Number(pObj.cabVendorCost) || 0) + (Number(pObj.otherExpenses) || 0);
+        let exp =
+          Number(pObj.totalExpense) ||
+          (Number(pObj.total_hotel_cost) || Number(pObj.hotelCost) || 0) +
+            (Number(pObj.total_cab_cost) || Number(pObj.cabVendorCost) || 0) +
+            (Number(pObj.total_food_cost) || 0) +
+            (Number(pObj.otherExpenses) || 0);
         if (exp === 0 && amt > 0) {
           exp = Math.round(amt * 0.65);
         }
@@ -195,6 +211,7 @@ export async function GET(request: NextRequest) {
         balancePending: totalBalance,
         hotelExpense,
         cabExpense,
+        foodExpense,
         otherExpense,
         totalExpense,
         netProfit,
@@ -216,3 +233,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to load financial analytics' }, { status: 500 });
   }
 }
+

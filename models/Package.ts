@@ -35,7 +35,10 @@ export interface IPackage extends Document {
   advancePaid: number;
   balancePending: number;
   hotelCost: number;
+  total_hotel_cost: number;
   cabVendorCost: number;
+  total_cab_cost: number;
+  total_food_cost: number;
   otherExpenses: number;
   totalExpense: number;
   netProfit: number;
@@ -81,7 +84,10 @@ const PackageSchema = new Schema<IPackage>(
     advancePaid: { type: Number, default: 0 },
     balancePending: { type: Number, default: 0 },
     hotelCost: { type: Number, default: 0 },
+    total_hotel_cost: { type: Number, default: 0 },
     cabVendorCost: { type: Number, default: 0 },
+    total_cab_cost: { type: Number, default: 0 },
+    total_food_cost: { type: Number, default: 0 },
     otherExpenses: { type: Number, default: 0 },
     totalExpense: { type: Number, default: 0 },
     netProfit: { type: Number, default: 0 },
@@ -104,13 +110,20 @@ PackageSchema.index({ 'hotelAllocations.hotelName': 1 });
 // Auto-calculate financial metrics and generate unique bookingId before save
 PackageSchema.pre('save', async function (next) {
   // Sync expenses and net profit
-  const hCost = Number(this.hotelCost) || 0;
-  const cCost = Number(this.cabVendorCost) || 0;
+  const hCost = Number(this.total_hotel_cost) || Number(this.hotelCost) || 0;
+  this.total_hotel_cost = hCost;
+  this.hotelCost = hCost;
+
+  const cCost = Number(this.total_cab_cost) || Number(this.cabVendorCost) || 0;
+  this.total_cab_cost = cCost;
+  this.cabVendorCost = cCost;
+
+  const fCost = Number(this.total_food_cost) || 0;
+  this.total_food_cost = fCost;
+
   const oCost = Number(this.otherExpenses) || 0;
-  if (!this.totalExpense || this.totalExpense === 0) {
-    this.totalExpense = hCost + cCost + oCost;
-  }
-  this.netProfit = (Number(this.packageAmount) || 0) - (Number(this.totalExpense) || 0);
+  this.totalExpense = hCost + cCost + fCost + oCost;
+  this.netProfit = (Number(this.packageAmount) || 0) - this.totalExpense;
 
   // If primary hotelName not explicitly set, sync from hotelAllocations or hotelDetails
   if (!this.hotelName && this.hotelAllocations && this.hotelAllocations.length > 0) {

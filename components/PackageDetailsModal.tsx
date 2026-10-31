@@ -1,12 +1,14 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   X, Calendar, Users, Phone, Building2, IndianRupee,
-  MapPin, Hotel, Clock, Edit, Check, Copy, ExternalLink, UserCheck, Truck, Download, FileText, MessageCircle, CreditCard
+  MapPin, Hotel, Clock, Edit, Check, Copy, ExternalLink, UserCheck, Truck, Download, FileText, MessageCircle, CreditCard,
+  UtensilsCrossed, Receipt, Plus, Trash2
 } from 'lucide-react';
-import { formatName, getInitials, getStatusConfig, formatDisplayCurrency } from '@/lib/formatters';
+import { formatName, getInitials, getStatusConfig, formatDisplayCurrency, getCrossMonthInfo } from '@/lib/formatters';
 import { exportSinglePackagePDF } from '@/lib/pdfExport';
 import { getGuestWhatsAppLink, getDriverDutyWhatsAppLink } from '@/lib/whatsapp';
+import FoodModal, { FoodLogItem } from './FoodModal';
 
 interface DailyLog {
   dayNumber: number;
@@ -33,6 +35,9 @@ export interface PackageDetailData {
   packageAmount: number;
   advancePaid: number;
   balancePending: number;
+  total_hotel_cost?: number;
+  total_cab_cost?: number;
+  total_food_cost?: number;
   hotelCost?: number;
   cabVendorCost?: number;
   otherExpenses?: number;
@@ -76,39 +81,87 @@ export default function PackageDetailsModal({
   onRecordPayment,
 }: PackageDetailsModalProps) {
   const [copied, setCopied] = useState(false);
+  const [currentPkg, setCurrentPkg] = useState<PackageDetailData | null>(pkg);
   const [fleetLogs, setFleetLogs] = useState<any[]>([]);
+  const [packageFoodLogs, setPackageFoodLogs] = useState<any[]>([]);
+  const [showFoodModal, setShowFoodModal] = useState(false);
+  const [editingFoodItem, setEditingFoodItem] = useState<any | null>(null);
+
+  const reloadData = useCallback(async () => {
+    if (!pkg?._id) return;
+    try {
+      const res = await fetch(`/api/packages/${pkg._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentPkg(data);
+        if (Array.isArray(data.fleetLogs)) {
+          setFleetLogs(data.fleetLogs);
+        }
+      }
+
+      const foodRes = await fetch(`/api/food?packageId=${pkg.bookingId}`);
+      if (foodRes.ok) {
+        const fData = await foodRes.json();
+        setPackageFoodLogs(Array.isArray(fData) ? fData : []);
+      }
+    } catch {
+      // ignore
+    }
+  }, [pkg]);
 
   useEffect(() => {
-    if (isOpen && pkg && pkg._id) {
-      fetch(`/api/packages/${pkg._id}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.fleetLogs)) {
-            setFleetLogs(data.fleetLogs);
-          }
-        })
-        .catch(() => {});
+    if (isOpen && pkg) {
+      setCurrentPkg(pkg);
+      reloadData();
     } else {
       setFleetLogs([]);
+      setPackageFoodLogs([]);
     }
-  }, [isOpen, pkg]);
+  }, [isOpen, pkg, reloadData]);
 
-  if (!isOpen || !pkg) return null;
+  if (!isOpen || !currentPkg) return null;
+
+  const displayPkg = currentPkg;
 
   const handleDownloadPDF = () => {
-    if (!pkg) return;
-    exportSinglePackagePDF(pkg, fleetLogs);
+    exportSinglePackagePDF(displayPkg, fleetLogs);
   };
 
   const copyBookingId = () => {
-    navigator.clipboard.writeText(pkg.bookingId);
+    navigator.clipboard.writeText(displayPkg.bookingId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const statusConfig = getStatusConfig(pkg.status);
-  const formattedGuestName = formatName(pkg.guestName);
-  const initials = getInitials(pkg.guestName);
+  const handleDeleteFood = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this dining expense?')) return;
+    try {
+      const res = await fetch(`/api/food/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        reloadData();
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const statusConfig = getStatusConfig(displayPkg.status);
+  const formattedGuestName = formatName(displayPkg.guestName);
+  const initials = getInitials(displayPkg.guestName);
+
+  // Auto-calculated costs & profit breakdown
+  const hotelCost = Number(displayPkg.total_hotel_cost) || Number(displayPkg.hotelCost) || 0;
+  const cabCost =
+    Number(displayPkg.total_cab_cost) ||
+    Number(displayPkg.cabVendorCost) ||
+    fleetLogs.reduce((s, f) => s + (Number(f.daily_cab_cost) || Number(f.vendorCost) || 0), 0);
+  const foodCost =
+    Number(displayPkg.total_food_cost) ||
+    packageFoodLogs.reduce((s, f) => s + (Number(f.foodCost) || 0), 0);
+  const grandTotalOperationalCost = hotelCost + cabCost + foodCost;
+  const packageRevenue = Number(displayPkg.packageAmount) || 0;
+  const netProfit = packageRevenue - grandTotalOperationalCost;
+  const profitMargin = packageRevenue > 0 ? ((netProfit / packageRevenue) * 100).toFixed(1) : '0.0';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
@@ -128,7 +181,7 @@ export default function PackageDetailsModal({
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Booking ID Pill */}
                 <span className="font-mono font-bold text-xs bg-white/15 hover:bg-white/20 px-2.5 py-1 rounded-lg tracking-wider text-amber-300 flex items-center gap-1.5 transition-colors">
-                  {pkg.bookingId}
+                  {displayPkg.bookingId}
                   <button
                     onClick={copyBookingId}
                     className="hover:text-white transition-colors"
@@ -144,9 +197,9 @@ export default function PackageDetailsModal({
                   {statusConfig.label}
                 </span>
 
-                {pkg.totalDays && (
+                {displayPkg.totalDays && (
                   <span className="text-xs bg-white/10 px-2.5 py-1 rounded-full text-white/80 font-medium">
-                    {pkg.totalDays}
+                    {displayPkg.totalDays}
                   </span>
                 )}
               </div>
@@ -157,15 +210,15 @@ export default function PackageDetailsModal({
               </h2>
 
               <p className="text-xs text-white/70">
-                Booked via <span className="text-white font-medium">{pkg.agencyName || 'Direct'}</span> • <span className="text-amber-300 font-medium">{pkg.totalPax} Guests</span>
+                Booked via <span className="text-white font-medium">{displayPkg.agencyName || 'Direct'}</span> • <span className="text-amber-300 font-medium">{displayPkg.totalPax} Guests</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {pkg.contactNumber && (
+            {displayPkg.contactNumber && (
               <a
-                href={getGuestWhatsAppLink(pkg, fleetLogs)}
+                href={getGuestWhatsAppLink(displayPkg, fleetLogs)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all border border-emerald-500"
@@ -229,7 +282,7 @@ export default function PackageDetailsModal({
               </h3>
               {onRecordPayment && (
                 <button
-                  onClick={() => onRecordPayment(pkg)}
+                  onClick={() => onRecordPayment(displayPkg)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors border border-emerald-200"
                 >
                   <CreditCard size={13} />
@@ -238,37 +291,117 @@ export default function PackageDetailsModal({
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
-                <IndianRupee size={13} className="text-blue-500" />
-                Package Amount
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <IndianRupee size={13} className="text-blue-500" />
+                  Package Amount
+                </div>
+                <div className="text-xl font-bold font-heading text-gray-900">
+                  {formatDisplayCurrency(displayPkg.packageAmount)}
+                </div>
               </div>
-              <div className="text-xl font-bold font-heading text-gray-900">
-                {formatDisplayCurrency(pkg.packageAmount)}
-              </div>
-            </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
-                <IndianRupee size={13} className="text-green-500" />
-                Advance Paid
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <IndianRupee size={13} className="text-green-500" />
+                  Advance Paid
+                </div>
+                <div className="text-xl font-bold font-heading text-green-600">
+                  {formatDisplayCurrency(displayPkg.advancePaid)}
+                </div>
               </div>
-              <div className="text-xl font-bold font-heading text-green-600">
-                {formatDisplayCurrency(pkg.advancePaid)}
-              </div>
-            </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
-                <IndianRupee size={13} className={pkg.balancePending > 0 ? 'text-red-500' : 'text-gray-400'} />
-                Balance Pending
-              </div>
-              <div className={`text-xl font-bold font-heading ${pkg.balancePending > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                {formatDisplayCurrency(pkg.balancePending)}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <IndianRupee size={13} className={displayPkg.balancePending > 0 ? 'text-red-500' : 'text-gray-400'} />
+                  Balance Pending
+                </div>
+                <div className={`text-xl font-bold font-heading ${displayPkg.balancePending > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  {formatDisplayCurrency(displayPkg.balancePending)}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Master Package Cost & Profit Breakdown Card (Auto-Calculation) */}
+          <div className="bg-gradient-to-br from-slate-900 via-[#0B192C] to-slate-950 text-white rounded-3xl p-5 border border-slate-800 shadow-md space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center">
+                  <Receipt size={16} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                    Master Package Cost & Profit Breakdown
+                  </h4>
+                  <p className="text-[11px] text-white/60">
+                    Real-time operational expenses auto-aggregated against revenue
+                  </p>
+                </div>
+              </div>
+
+              <span
+                className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                  netProfit >= 0
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                }`}
+              >
+                {netProfit >= 0 ? 'Net Profit' : 'Net Loss'}: {formatDisplayCurrency(netProfit)}{' '}
+                {packageRevenue > 0 && `(${profitMargin}%)`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-white/10">
+              <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                <div className="text-[11px] text-white/60 mb-0.5 flex items-center gap-1">
+                  <Hotel size={12} className="text-amber-400" /> Hotel & Room Cost
+                </div>
+                <div className="text-base font-bold font-mono text-amber-300">
+                  {formatDisplayCurrency(hotelCost)}
+                </div>
+                <div className="text-[10px] text-white/40 mt-0.5">
+                  {displayPkg.numberOfRooms ?? 1} Rooms &bull; {displayPkg.extraBeds ?? 0} Beds
+                </div>
+              </div>
+
+              <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                <div className="text-[11px] text-white/60 mb-0.5 flex items-center gap-1">
+                  <Truck size={12} className="text-blue-400" /> Cab Fleet Cost
+                </div>
+                <div className="text-base font-bold font-mono text-blue-300">
+                  {formatDisplayCurrency(cabCost)}
+                </div>
+                <div className="text-[10px] text-white/40 mt-0.5">
+                  {fleetLogs.length} Assigned Days
+                </div>
+              </div>
+
+              <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                <div className="text-[11px] text-white/60 mb-0.5 flex items-center gap-1">
+                  <UtensilsCrossed size={12} className="text-orange-400" /> Food & Dining Cost
+                </div>
+                <div className="text-base font-bold font-mono text-orange-300">
+                  {formatDisplayCurrency(foodCost)}
+                </div>
+                <div className="text-[10px] text-white/40 mt-0.5">
+                  {packageFoodLogs.length} Meals Logged
+                </div>
+              </div>
+
+              <div className="bg-white/10 p-3 rounded-2xl border border-white/20">
+                <div className="text-[11px] text-white/70 mb-0.5 flex items-center gap-1 font-semibold">
+                  <IndianRupee size={12} className="text-white" /> Grand Total Cost
+                </div>
+                <div className="text-base font-bold font-mono text-white">
+                  {formatDisplayCurrency(grandTotalOperationalCost)}
+                </div>
+                <div className="text-[10px] text-white/50 mt-0.5">
+                  Hotel + Cab + Food
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Guest & Trip Key Details */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
@@ -282,12 +415,12 @@ export default function PackageDetailsModal({
                   <Phone size={12} />
                   Contact Phone
                 </div>
-                {pkg.contactNumber ? (
+                {displayPkg.contactNumber ? (
                   <a
-                    href={`tel:${pkg.contactNumber}`}
+                    href={`tel:${displayPkg.contactNumber}`}
                     className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1 font-mono"
                   >
-                    {pkg.contactNumber}
+                    {displayPkg.contactNumber}
                   </a>
                 ) : (
                   <span className="text-sm text-gray-400">—</span>
@@ -300,7 +433,7 @@ export default function PackageDetailsModal({
                   Booking Agency
                 </div>
                 <div className="text-sm font-semibold text-gray-800">
-                  {pkg.agencyName || 'Direct'}
+                  {displayPkg.agencyName || 'Direct'}
                 </div>
               </div>
 
@@ -310,7 +443,7 @@ export default function PackageDetailsModal({
                   Total Guests
                 </div>
                 <div className="text-sm font-semibold text-gray-800">
-                  {pkg.totalPax} Pax
+                  {displayPkg.totalPax} Pax
                 </div>
               </div>
 
@@ -320,7 +453,7 @@ export default function PackageDetailsModal({
                   Duration
                 </div>
                 <div className="text-sm font-semibold text-gray-800">
-                  {pkg.totalDays || '—'}
+                  {displayPkg.totalDays || '—'}
                 </div>
               </div>
             </div>
@@ -332,17 +465,31 @@ export default function PackageDetailsModal({
                   Check-in Date
                 </div>
                 <div className="text-sm font-bold text-gray-900">
-                  {formatDate(pkg.checkInDate)}
+                  {formatDate(displayPkg.checkInDate)}
                 </div>
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/70">
-                <div className="text-xs text-slate-600 font-medium flex items-center gap-1 mb-0.5">
-                  <Calendar size={13} />
-                  Check-out Date
+                <div className="text-xs text-slate-600 font-medium flex items-center justify-between mb-0.5">
+                  <span className="flex items-center gap-1">
+                    <Calendar size={13} />
+                    Check-out Date
+                  </span>
+                  {(() => {
+                    const cm = getCrossMonthInfo(displayPkg.checkInDate, displayPkg.checkOutDate);
+                    return cm.isCrossMonth ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs"
+                        title={`Cross-month tour: from ${formatDate(displayPkg.checkInDate)} to ${formatDate(displayPkg.checkOutDate)}`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                        {cm.label}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="text-sm font-bold text-gray-900">
-                  {formatDate(pkg.checkOutDate)}
+                  {formatDate(displayPkg.checkOutDate)}
                 </div>
               </div>
             </div>
@@ -350,30 +497,33 @@ export default function PackageDetailsModal({
 
           {/* Hotel & Stay Information */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Hotel size={14} className="text-amber-500" />
                 Hotel & Room Allocation
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-lg">
-                  🛏️ {pkg.numberOfRooms ?? 1} Room{(pkg.numberOfRooms ?? 1) > 1 ? 's' : ''}
+                  🛏️ {displayPkg.numberOfRooms ?? 1} Room{(displayPkg.numberOfRooms ?? 1) > 1 ? 's' : ''}
                 </span>
                 <span className="text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-lg">
-                  ➕ {pkg.extraBeds ?? 0} Extra Bed{(pkg.extraBeds ?? 0) !== 1 ? 's' : ''}
+                  ➕ {displayPkg.extraBeds ?? 0} Extra Bed{(displayPkg.extraBeds ?? 0) !== 1 ? 's' : ''}
+                </span>
+                <span className="text-xs font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-lg font-mono">
+                  🏨 Hotel Cost: {formatDisplayCurrency(hotelCost)}
                 </span>
               </div>
             </div>
 
-            {pkg.hotelName && (
+            {displayPkg.hotelName && (
               <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 <span className="text-amber-600 font-semibold text-xs uppercase tracking-wide">Assigned Hotel:</span>
-                <span>{pkg.hotelName}</span>
+                <span>{displayPkg.hotelName}</span>
               </div>
             )}
 
             <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed bg-gray-50 p-3.5 rounded-xl border border-gray-100">
-              {pkg.hotelDetails || 'No additional hotel notes specified for this package.'}
+              {displayPkg.hotelDetails || 'No additional hotel notes specified for this package.'}
             </p>
           </div>
 
@@ -382,13 +532,13 @@ export default function PackageDetailsModal({
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
                 <MapPin size={14} className="text-amber-500" />
-                Daily Itinerary Plan ({pkg.dailyLogs?.length || 0} Days)
+                Daily Itinerary Plan ({displayPkg.dailyLogs?.length || 0} Days)
               </h3>
               {onOpenItinerary && (
                 <button
                   onClick={() => {
                     onClose();
-                    onOpenItinerary(pkg);
+                    onOpenItinerary(displayPkg);
                   }}
                   className="text-xs text-amber-600 hover:text-amber-700 font-semibold flex items-center gap-1"
                 >
@@ -397,9 +547,9 @@ export default function PackageDetailsModal({
               )}
             </div>
 
-            {pkg.dailyLogs && pkg.dailyLogs.length > 0 ? (
+            {displayPkg.dailyLogs && displayPkg.dailyLogs.length > 0 ? (
               <div className="space-y-2.5">
-                {pkg.dailyLogs.map((log) => (
+                {displayPkg.dailyLogs.map((log) => (
                   <div
                     key={log.dayNumber}
                     className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/70 hover:bg-white hover:border-amber-200 transition-colors"
@@ -442,7 +592,7 @@ export default function PackageDetailsModal({
                   <button
                     onClick={() => {
                       onClose();
-                      onOpenItinerary(pkg);
+                      onOpenItinerary(displayPkg);
                     }}
                     className="mt-2 text-xs font-semibold text-amber-600 hover:text-amber-700"
                   >
@@ -464,7 +614,7 @@ export default function PackageDetailsModal({
                 <button
                   onClick={() => {
                     onClose();
-                    onEdit(pkg);
+                    onEdit(displayPkg);
                   }}
                   className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
                 >
@@ -475,82 +625,91 @@ export default function PackageDetailsModal({
 
             {fleetLogs.length > 0 ? (
               <div className="space-y-2.5">
-                {fleetLogs.map((log: any, idx: number) => (
-                  <div
-                    key={log._id || `view-fleet-${idx}`}
-                    className="p-3.5 rounded-xl border border-gray-100 bg-slate-50/70 hover:bg-white hover:border-blue-200 transition-colors space-y-2"
-                  >
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="font-heading font-bold text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
-                          Day {idx + 1}
-                        </span>
-                        <span className="text-xs text-gray-700 font-semibold">
-                          {formatDate(log.operationDate)}
-                        </span>
-                        {log.paxInVehicle && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                            {log.paxInVehicle} Pax
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-gray-900 bg-white border border-gray-200 px-2 py-0.5 rounded-md">
-                          {log.vehicleType || 'Vehicle'}
-                        </span>
-                        {log.vehicleNumber && (
-                          <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md uppercase">
-                            {log.vehicleNumber}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-sm font-semibold text-gray-900">
-                      🛣️ {log.dutyRoute || 'Duty route not specified'}
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap pt-1 border-t border-gray-200/50">
-                      {log.driverName && (
-                        <div>
-                          Driver: <strong className="text-gray-800">{log.driverName}</strong>
-                        </div>
-                      )}
-                      {log.driverPhone && (
+                {fleetLogs.map((log: any, idx: number) => {
+                  const logCabCost = Number(log.daily_cab_cost) || Number(log.vendorCost) || 0;
+                  return (
+                    <div
+                      key={log._id || `view-fleet-${idx}`}
+                      className="p-3.5 rounded-xl border border-gray-100 bg-slate-50/70 hover:bg-white hover:border-blue-200 transition-colors space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
-                          <a
-                            href={`tel:${log.driverPhone}`}
-                            className="text-blue-600 hover:underline flex items-center gap-1 font-mono"
-                          >
-                            <Phone size={10} /> {log.driverPhone}
-                          </a>
-                          <a
-                            href={getDriverDutyWhatsAppLink(log, pkg)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold flex items-center gap-1 text-[11px] border border-emerald-200 transition-colors"
-                            title="Dispatch Duty Slip to Driver on WhatsApp"
-                          >
-                            <MessageCircle size={10} />
-                            <span>WhatsApp Duty</span>
-                          </a>
+                          <span className="font-heading font-bold text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
+                            Day {idx + 1}
+                          </span>
+                          <span className="text-xs text-gray-700 font-semibold">
+                            {formatDate(log.operationDate)}
+                          </span>
+                          {log.paxInVehicle && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              {log.paxInVehicle} Pax
+                            </span>
+                          )}
+                          <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded">
+                            {log.numberOfCabs ?? 1} Cab{(log.numberOfCabs ?? 1) > 1 ? 's' : ''}
+                          </span>
                         </div>
-                      )}
-                      {log.vendorName && (
-                        <div className="text-gray-500">
-                          Vendor: <span className="font-medium text-gray-700">{log.vendorName}</span>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-gray-900 bg-white border border-gray-200 px-2 py-0.5 rounded-md">
+                            {log.vehicleType || 'Vehicle'}
+                          </span>
+                          {log.vehicleNumber && (
+                            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md uppercase">
+                              {log.vehicleNumber}
+                            </span>
+                          )}
+                          <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                            Cost: {formatDisplayCurrency(logCabCost)}
+                          </span>
                         </div>
+                      </div>
+
+                      <div className="text-sm font-semibold text-gray-900">
+                        🛣️ {log.dutyRoute || 'Duty route not specified'}
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap pt-1 border-t border-gray-200/50">
+                        {log.driverName && (
+                          <div>
+                            Driver: <strong className="text-gray-800">{log.driverName}</strong>
+                          </div>
+                        )}
+                        {log.driverPhone && (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`tel:${log.driverPhone}`}
+                              className="text-blue-600 hover:underline flex items-center gap-1 font-mono"
+                            >
+                              <Phone size={10} /> {log.driverPhone}
+                            </a>
+                            <a
+                              href={getDriverDutyWhatsAppLink(log, displayPkg)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold flex items-center gap-1 text-[11px] border border-emerald-200 transition-colors"
+                              title="Dispatch Duty Slip to Driver on WhatsApp"
+                            >
+                              <MessageCircle size={10} />
+                              <span>WhatsApp Duty</span>
+                            </a>
+                          </div>
+                        )}
+                        {log.vendorName && (
+                          <div className="text-gray-500">
+                            Vendor: <span className="font-medium text-gray-700">{log.vendorName}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {log.remarks && (
+                        <p className="text-xs text-gray-500 italic">
+                          Note: {log.remarks}
+                        </p>
                       )}
                     </div>
-
-                    {log.remarks && (
-                      <p className="text-xs text-gray-500 italic">
-                        Note: {log.remarks}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-6 border border-dashed border-gray-200 rounded-xl bg-gray-50">
@@ -562,7 +721,7 @@ export default function PackageDetailsModal({
                   <button
                     onClick={() => {
                       onClose();
-                      onEdit(pkg);
+                      onEdit(displayPkg);
                     }}
                     className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700"
                   >
@@ -572,12 +731,103 @@ export default function PackageDetailsModal({
               </div>
             )}
           </div>
+
+          {/* Food & Dining Section */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <UtensilsCrossed size={14} className="text-orange-500" />
+                Food & Dining Expenses ({packageFoodLogs.length} Records)
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold font-mono text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg">
+                  Total Food: {formatDisplayCurrency(foodCost)}
+                </span>
+                <button
+                  onClick={() => {
+                    setEditingFoodItem(null);
+                    setShowFoodModal(true);
+                  }}
+                  className="text-xs font-semibold text-white px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#FF9F1C' }}
+                >
+                  <Plus size={12} /> Add Dining Bill
+                </button>
+              </div>
+            </div>
+
+            {packageFoodLogs.length > 0 ? (
+              <div className="space-y-2">
+                {packageFoodLogs.map((food: any) => (
+                  <div
+                    key={food._id}
+                    className="p-3 rounded-xl border border-gray-100 bg-orange-50/20 hover:bg-white hover:border-orange-200 transition-colors flex items-center justify-between flex-wrap gap-2"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-900">{food.restaurantName}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+                          {food.mealType}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium">
+                          {formatDate(food.mealDate)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {food.paxCount ? `${food.paxCount} Pax` : ''}{' '}
+                        {food.remarks && `• Note: ${food.remarks}`}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="font-mono font-bold text-sm text-gray-900">
+                        {formatDisplayCurrency(food.foodCost)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingFoodItem(food);
+                            setShowFoodModal(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Bill"
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFood(food._id)}
+                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete Bill"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 border border-dashed border-gray-200 rounded-xl bg-gray-50">
+                <UtensilsCrossed size={24} className="mx-auto text-gray-400 mb-1" />
+                <p className="text-xs text-gray-400">No dining bills recorded for this package.</p>
+                <button
+                  onClick={() => {
+                    setEditingFoodItem(null);
+                    setShowFoodModal(true);
+                  }}
+                  className="mt-2 text-xs font-semibold text-orange-600 hover:text-orange-700"
+                >
+                  + Record Guest Dining Expense
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
           <div className="text-xs text-gray-400">
-            Booking ID: <span className="font-mono text-gray-600">{pkg.bookingId}</span>
+            Booking ID: <span className="font-mono text-gray-600">{displayPkg.bookingId}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -594,7 +844,7 @@ export default function PackageDetailsModal({
               <button
                 onClick={() => {
                   onClose();
-                  onEdit(pkg);
+                  onEdit(displayPkg);
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
               >
@@ -611,6 +861,20 @@ export default function PackageDetailsModal({
           </div>
         </div>
       </div>
+
+      {/* Embedded Food Modal */}
+      <FoodModal
+        isOpen={showFoodModal}
+        onClose={() => {
+          setShowFoodModal(false);
+          setEditingFoodItem(null);
+        }}
+        onSave={reloadData}
+        editData={editingFoodItem}
+        defaultPackageId={displayPkg.bookingId}
+        defaultGuestName={displayPkg.guestName}
+        addToast={() => {}}
+      />
     </div>
   );
 }
